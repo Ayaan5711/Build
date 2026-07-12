@@ -1,0 +1,683 @@
+These 3 slides are about **Vocal Accessibility (VA)**—making voice-enabled systems usable and inclusive for everyone, including people with disabilities, diverse speech patterns, different languages, and various environmental conditions.
+
+# 1. Accessibility is Multi-Dimensional; Vocal Accessibility Runs Across All of It
+
+## Core Message
+
+Accessibility is not limited to vision or hearing impairments. Vocal Accessibility acts as a connecting layer across all accessibility domains, ensuring voice-enabled experiences are inclusive, adaptive, and trustworthy.
+
+***
+
+## Types of Accessibility
+
+### 1. Visual Accessibility
+
+For people who are:
+
+* Blind
+* Low vision
+* Color blind
+
+Supporting technologies:
+
+* Screen readers
+* Magnification
+* Alt text & Braille
+* High contrast interfaces
+
+**Voice Accessibility Contribution**
+
+* Voice commands reduce dependence on visual interfaces.
+* Spoken responses provide information without requiring sight.
+
+***
+
+### 2. Hearing Accessibility
+
+For people who are:
+
+* Deaf
+* Hard of hearing
+
+Supporting features:
+
+* Captions and transcripts
+* Sign Language
+* Visual alerts
+* Speech-to-text
+
+**Voice Accessibility Contribution**
+
+* Voice interactions must provide text alternatives.
+* Every voice output should have visual equivalents.
+
+***
+
+### 3. Speech / Vocal Accessibility
+
+For people with:
+
+* Speech impairments
+* Diverse speech patterns
+
+Examples:
+
+* Stuttering
+* Dysarthria
+* Accents
+* Non-standard pronunciation
+
+Requirements:
+
+* Inclusive Voice UX
+* Adaptive ASR (Automatic Speech Recognition)
+* Voice interaction standards
+* PAS 901:2025 compliance
+
+***
+
+### 4. Motor Accessibility
+
+For people with:
+
+* Limited mobility
+* Dexterity challenges
+* Motor impairments
+
+Supporting features:
+
+* Keyboard access
+* Switch access
+* Voice control
+* Eye tracking
+
+**Voice acts as an assistive input method** when using hands is difficult.
+
+***
+
+### 5. Cognitive Accessibility
+
+For people with:
+
+* Learning difficulties
+* Memory challenges
+* Cognitive disabilities
+
+Supporting features:
+
+* Plain language
+* Content simplification
+* Guided workflows
+* Assistive AI
+
+***
+
+### 6. Neurodiversity Accessibility
+
+For people with:
+
+* Autism
+* ADHD
+* Sensory processing differences
+
+Supporting features:
+
+* Reduced distractions
+* Customizable interfaces
+* Sensory-friendly experiences
+
+***
+
+# Vocal Accessibility as the Connecting Layer
+
+Definition:
+
+> Ensuring voice-enabled experiences are inclusive, adaptive and trustworthy for everyone.
+
+It connects accessibility requirements across all domains.
+
+***
+
+## Experiences & Channels Where VA Applies
+
+### Web
+
+* WCAG-compliant websites
+* Voice navigation
+* Voice search
+
+### Mobile
+
+* iOS and Android applications
+* Hands-free interaction
+
+### Documents
+
+Accessible:
+
+* PDF
+* Word
+* Excel
+* PowerPoint
+
+Features:
+
+* Read aloud
+* Dictation
+* Voice navigation
+
+### Video
+
+* Captions
+* Audio descriptions
+* Transcripts
+
+### Voice / VUI
+
+(VUI = Voice User Interface)
+
+Examples:
+
+* Voice assistants
+* IVR systems
+* Voice bots
+
+### Sign Language
+
+* Support for sign-language users
+* Visual communication alternatives
+
+### Physical Environment
+
+Accessible:
+
+* Wayfinding
+* Public information systems
+* Digital signage
+
+### IoT & Smart Spaces
+
+Examples:
+
+* Smart homes
+* Connected offices
+* Smart devices
+
+### AR/VR
+
+Accessible immersive experiences
+
+### AI Systems
+
+Inclusive:
+
+* AI assistants
+* Copilots
+* Conversational AI
+
+***
+
+## Standards & Governance
+
+### PAS 901:2025
+
+**Title:** Vocal Accessibility in System Design – Code of Practice
+
+Provides guidelines for:
+
+* Design
+* Development
+* Testing
+* Governance
+
+### Additional Standards
+
+#### WCAG 2.2
+
+Web Content Accessibility Guidelines
+
+Focus:
+
+* Perceivable
+* Operable
+* Understandable
+* Robust
+
+#### ISO Accessibility Standards
+
+International accessibility requirements.
+
+#### Local Regulations
+
+Country-specific compliance requirements.
+
+***
+
+## Business & Societal Value
+
+Benefits:
+
+### Inclusive & Trusted AI
+
+More users can engage with the system.
+
+### Better Customer Experience
+
+Higher satisfaction and adoption.
+
+### Reduced Compliance Risk
+
+Lower legal and accessibility-related risks.
+
+### Faster Innovation
+
+Better conversational AI systems.
+
+### Competitive Differentiation
+
+Industry leadership in accessibility.
+
+### Long-Term Value Creation
+
+For:
+
+* Clients
+* Society
+* AI ecosystem
+
+***
+
+# 2. Every Voice. Every Context. Adopting VA Standards
+
+## PAS 901:2025
+
+Full Title:
+
+> "Vocal Accessibility in System Design – Code of Practice"
+
+Purpose:
+
+Provides guidelines for designing voice-activated:
+
+* Systems
+* Products
+* Services
+
+Ensuring accessibility for users with diverse speech abilities and needs.
+
+***
+
+# The Five Principles of Vocal Accessibility
+
+## 1. UNDERSTAND
+
+### Principle
+
+Do not assume perfect speech.
+
+Real-world users may have:
+
+* Speech impairments
+* Strong accents
+* Age-related speech changes
+* Temporary speech challenges
+
+### Key Concepts
+
+#### Every Voice Counts
+
+Systems should recognize diverse voices.
+
+#### Diverse Abilities
+
+Voice systems must work for everyone.
+
+#### Natural Variations
+
+Speech differences are normal.
+
+***
+
+## 2. SIMPLIFY
+
+### Principle
+
+Natural conversations, not commands.
+
+Instead of forcing users to memorize commands:
+
+Bad:
+
+> "Press 3 and say ACCOUNT\_BALANCE\_REQUEST"
+
+Better:
+
+> "What would you like to do today?"
+
+### Key Concepts
+
+* Intent over syntax
+* Cognitive ease
+* Inclusive design
+
+***
+
+## 3. ADAPT
+
+### Principle
+
+Always provide alternatives.
+
+Interaction modes should include:
+
+* Voice
+* Text
+* Touch
+
+### Why?
+
+If one modality fails, another remains available.
+
+Examples:
+
+* Voice → Text fallback
+* Text → Voice output
+* Touch controls
+
+***
+
+## 4. ASSURE
+
+### Principle
+
+Provide clear feedback and recovery.
+
+Users should always know:
+
+* What happened
+* What went wrong
+* How to continue
+
+### Features
+
+#### Clear Confirmations
+
+Example:
+
+> "Your payment was successful."
+
+#### Error Recovery
+
+Example:
+
+> "I didn't understand. Please try again or type your request."
+
+#### Helpful Guidance
+
+Provide next-step suggestions.
+
+***
+
+## 5. TRUST
+
+### Principle
+
+Build trust through transparency and privacy.
+
+### Components
+
+#### Privacy by Design
+
+Privacy integrated from beginning.
+
+#### Secure by Default
+
+Secure configuration out of the box.
+
+#### Transparency
+
+Users know:
+
+* What data is collected
+* Why it is collected
+* How it is used
+
+***
+
+## Overall Outcomes
+
+Voice systems should be:
+
+### Inclusive
+
+Everyone can participate.
+
+### Intelligent
+
+System adapts to user needs.
+
+### Human-Centered
+
+Designed around people, not technology.
+
+***
+
+# 3. Who Gets Excluded?
+
+## Central Message
+
+Voice itself is not inaccessible.
+
+### The Problem:
+
+Voice-only experiences exclude many people.
+
+### The Solution:
+
+Design for every voice and every user.
+
+***
+
+# Groups Commonly Excluded
+
+## 1. People with Speech Impairments
+
+Examples:
+
+* Dysarthria
+* Stuttering
+* Cerebral palsy
+* ALS
+* Parkinson's disease
+* Other speech differences
+
+Example failure:
+
+User:
+
+> "Call Mom"
+
+System:
+
+> "Sorry, I didn't understand."
+
+### Problem
+
+Traditional speech-recognition systems often fail to recognize atypical speech patterns.
+
+***
+
+## 2. People with Hearing Challenges
+
+Examples:
+
+* Deaf users
+* Hard-of-hearing users
+
+Problem:
+
+Voice-only response:
+
+> "Please confirm payment of $120"
+
+No:
+
+* Caption
+* Text
+* Visual confirmation
+
+### Result
+
+User cannot access the information.
+
+***
+
+## 3. Non-Native Speakers & Accent Diversity
+
+Examples:
+
+* Regional accents
+* Dialects
+* Multilingual users
+
+Illustrative failure:
+
+User:
+
+> "Book a cab to Behala."
+
+System:
+
+> "Booking a cab to Bengaluru. Is that right?"
+
+### Problem
+
+Accent misrecognition creates errors and frustration.
+
+***
+
+## 4. People in Noisy Environments
+
+Examples:
+
+* Airports
+* Train stations
+* Markets
+* Factories
+
+Problem:
+
+Background noise interferes with:
+
+* ASR accuracy
+* Command recognition
+
+Example:
+
+> Metro announcements overpower user speech.
+
+***
+
+## 5. People with Cognitive or Memory Challenges
+
+Examples:
+
+* Elderly users
+* Learning disabilities
+* Memory impairments
+
+Problem:
+
+Complex instructions:
+
+> "Press 1, then 3, then say your account number."
+
+Too many steps.
+
+Result:
+
+* User confusion
+* Increased errors
+* Abandonment
+
+***
+
+# Design Principles to Prevent Exclusion
+
+## 1. Multimodal by Design
+
+Combine:
+
+* Voice
+* Text
+* Visuals
+* Gestures
+* Haptics
+
+Never rely on a single channel.
+
+***
+
+## 2. Captions & Transcripts
+
+Every voice interaction should provide:
+
+* Captions
+* Visual text
+* Transcripts
+
+***
+
+## 3. Language Inclusion
+
+Support:
+
+* Multiple languages
+* Regional accents
+* Dialects
+* Multilingual conversations
+
+***
+
+## 4. Adaptive & Contextual
+
+System adapts based on:
+
+* Environment
+* User preferences
+* User ability
+
+Examples:
+
+* Switch to text in noisy environments.
+* Simplify responses for cognitive accessibility.
+
+***
+
+## 5. Inclusive by Default
+
+Accessibility should not be an optional add-on.
+
+It should be built into:
+
+* Requirements
+* Architecture
+* Design
+* Testing
+* Deployment
+
+***
+
+# Key Takeaway From All 3 Slides
+
+**Vocal Accessibility is the practice of designing voice-enabled systems so that everyone can use them, regardless of speech ability, hearing ability, vision, motor capability, cognitive differences, language, accent, or environmental conditions.**
+
+The guiding framework is **PAS 901:2025**, which emphasizes:
+
+1. **Understand** every voice.
+2. **Simplify** interactions.
+3. **Adapt** through multimodal alternatives.
+4. **Assure** with feedback and recovery.
+5. **Trust** through privacy and transparency.
+
+The ultimate goal is to build **inclusive, intelligent, human-centered AI and conversational experiences** that work for everyone.

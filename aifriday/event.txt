@@ -1,0 +1,313 @@
+. During the Event 
+During the event, participant will work closely with mentors for guidance and, support. 
+Mentors will be randomly assigned to each team. This section explains the 
+expectations for interactions, collaboration, and conduct during the event. The event 
+timings provided are indicative. Please connect with your Branch SPOC for specific 
+event timings & details, as they can vary for each branch. 
+
+8.1. 
+Agenda for Match Day 
+# 
+Topic 
+Start Time 
+End Time 
+1 
+Match Time 
+2:00 PM 
+Duration 
+7.00 PM 
+2 
+Demo & Evaluation 
+7:00 PM 
+5:00  
+8:00 PM 
+3 
+Announce winners 
+8:00 PM 
+1:00 
+8:30 PM 
+8.2. 
+Code of Conduct 
+• Maintain ethical behaviour and inclusive communication 
+• Respect others’ ideas, time, and effort 
+• Avoid the use of proprietary data or unauthorized tools 
+0:30 
+• Inform organizers well in advance in case of changes in your availability 
+• Adhere to the Tata code of conduct in its entirety   
+• During conflicts organizers decision shall be conclusive 
+8.3. 
+8.4. 
+8.5. 
+8.6. 
+Data Usage & Ethics 
+• Use only open-source or provided datasets or you can create your own 
+synthetic data 
+• Ensure responsible AI principles are followed: fairness, accountability, and 
+transparency 
+• Cite all datasets and pre-trained models used 
+Interactions 
+• Prepare your queries or blockers in advance for effective discussion with 
+mentors 
+• Collaborate within team effectively to build the solution and ensure every 
+team member has a role to play. Evaluation criteria will consider this aspect 
+(Refer section 8.8) 
+Development Guidelines 
+• Use proper code commenting and modular design 
+• Use a popular /scalable Framework to build the solution 
+• Choose a Vector database or traditional database wherever applicable 
+• Avoid using ChatGPT to craft the entire solution 
+• Avoid cloning GitHub repositories for developing the entire solution 
+Demo 
+During the final stage of the hackathon, each team will present their AI solution to 
+the jury and audience. This is your opportunity to showcase the problem-solving 
+approach, technical implementation, and the impact of your project — concisely 
+and convincingly. 
+
+Each team will get exactly 5 minutes to present. Ensure that everyone has the 
+opportunity to speak. Time management is critical — plan your demo to highlight 
+the essence of your work effectively.  
+8.6.1. Suggested Flow for Demo 
+• Introduction (30 sec): Briefly state your team’s name, problem statement, and 
+the objective of your solution.  
+• Problem Context (30 sec): What challenge are you solving and why is it 
+important? 
+• Solution Overview (1 min): Describe the AI model, approach taken, tools used, 
+and any innovation introduced. 
+• Live Demo or Walkthrough (2 min): Demonstrate your working prototype or 
+solution flow with emphasis on usability and impact. 
+• Results & Metrics (30 sec): Present performance metrics (e.g., accuracy, 
+precision, AUC), validations, or comparisons with baseline. 
+• Conclusion (30 sec): Summarize key outcomes, limitations (if any), and 
+possible future enhancements. 
+8.6.2. Time Management Tips 
+• Assign a presenter for each flow, rehearse to stay within the time. 
+• Avoid spending too much time on theoretical background. 
+• Prioritize clarity and flow over technical depth — jury may ask follow-up 
+questions afterward. 
+8.7. 
+8.8. 
+Submission Guidelines 
+Each team must submit their solution within the defined timeline, and it must 
+include: 
+• Source code with README 
+• Model notebook(s) or pipeline with explanation 
+• Presentation deck containing Problem statement, Solution approach, AI/ML 
+techniques and Challenges Faced 
+• Demo video (max 5 minutes) -Optional 
+Evaluation Criteria 
+Projects are evaluated on a blend of innovation, impact, and execution. 
+Scoring Parameters: 
+• Participation and engagement during sessions 
+• Successful completion of hands-on activities 
+• Completion of the working application 
+• Creativity and innovation in the given projects 
+ | 10   
+• Participation and demonstration of understanding quizzes and debates 
+9. Escalation & Support 
+Sometimes challenges arise that participant can't resolve alone. This section provides 
+the protocol for raising concerns or requesting help from organizers. 
+• Escalate technical issues or rule violations to the branch SPOC. Refer: 13.9  
+10. Post-Event Activities 
+After the event, participant may participate in feedback, Demo. This section outlines 
+post-event responsibilities. 
+Selected solutions may receive further attention, development support, or exposure. 
+10.1. 
+Awards & Recognition 
+Top-performing teams as evaluated by the Jury will be duly recognized.  
+11. Benefits for Participant 
+Participating in the AI Friday event is not just about gamified playground; it's also a 
+rewarding and enriching learning experience. This section outlines the personal and 
+professional benefits participants gain from participating.  
+11.1. 
+11.2. 
+11.3. 
+11.4. 
+11.5. 
+Leadership Recognition 
+• Opportunity to be recognized as a domain expert and thought leader within 
+the organization 
+Networking 
+• Connect with like-minded professionals, tech leaders, and emerging AI talent 
+across departments or organizations 
+Skill Sharpening 
+• Exposure to fresh ideas and problem-solving approaches can help sharpen 
+your own AI/ML skills and perspectives 
+• Hands-on experience with AI tools and technologies with an open environment 
+to explore  
+Contribution to Learning Culture 
+• Be a key part of promoting innovation, continuous learning, and ethical AI 
+practices in your community 
+Recognition 
+• Teams that excel and are recognized by the Jury will receive due recognition.  
+ | 11   
+12. Key Milestones & Timeline 
+To help you plan and stay on track, here is a snapshot of the key phases and important 
+dates for the AI Fridays Hackathon: 
+12.1. 
+12.2. 
+12.3. 
+Round 1 Fridays: 
+• Every Week 10 to 20 New Teams will be identified. Each team will get 1 new 
+real world AI problem  
+• Monday to Thursday – Pre Match Coaching 
+• Friday is the main competition 
+• 1 Team qualifies for the next round of Quarterly Branch Finals 
+Quarterly Regional Final: 
+• Every Quarter, Weekly winning teams from Round 1 Qualifier compete at 
+Quarterly Branch Finals to progress for Quarterly National Finals 
+• More Advanced real-world problems will be given to solve 
+• 2 Teams each from large branches (Bangalore, Chennai, Delhi, Hyderabad, 
+Kolkata, Mumbai & Pune) and 1 team each from other branches qualify to the 
+Quarterly National Final 
+Quarterly National Final – Residential: 
+• Every Quarter, Regional Winning Teams of every branch will participate 
+• Advanced Problem to Solve 
+• 1 Quarterly National Winners 
+• Quarterly Celebration 
+13. Annexure 
+Reference materials to understand infrastructure set up and alignment with event 
+goals. 
+13.1. 
+Gen AI Lab Setup 
+Laptop pre-loaded with python, VS Code, AI tools, shared folder for team collaboration 
+will be available at AI Lab. These laptops are not in network, you cannot access Teams, 
+Mailbox etc. They have access to open Internet to explore all open AI tools and technologies. 
+• Below is the high-level Architecture of the Gen AI Lab Setup 
+ | 12   
+Figure 2:Gen AI Lab Setup Architecture 
+13.2. 
+Preinstalled Software List 
+• Python 
+• Apache Open Office 
+• Microsoft VS Code 
+• Ollama 
+• Tesseract OCR 
+13.3. 
+Preinstalled Local SLMs List 
+• Llama-3.2-3b-it (SLM – Chat Model) 
+• Gemma-3-4b-it (SLM – Chat Model) 
+• Qwen-2.5.1-coder-it (SLM – Chat Model) 
+• Deepseek-r1 (SLM – Reasoning Model) 
+• Gte-large (SLM – Embedding Model) 
+13.4. 
+Python Setup 
+Install Python extension for VS Code and Refer the following link to set the Python version 
+while working in VS Code. 
+Click on the Python version displayed on the bottom right corner of the VS Code. Select 
+Python 3.12.8 – Global 
+Once selected, you run pip freeze in the VS Code terminal to check the list of pre-installed 
+packages. 
+Below is sample for your reference 
+ | 13   
+13.5. 
+13.6. 
+13.7. 
+List of currently available Models 
+• azure/genailab-maas-gpt-35-turbo 
+• azure/genailab-maas-gpt-4o 
+• azure/genailab-maas-gpt-4o-mini 
+• azure/genailab-maas-text-embedding-3-large 
+• azure/genailab-maas-whisper 
+• azure_ai/genailab-maas-DeepSeek-R1 
+• azure_ai/genailab-maas-DeepSeek-V3-0324 
+• azure_ai/genailab-maas-Llama-3.2-90B-Vision-Instruct 
+• azure_ai/genailab-maas-Llama-3.3-70B-Instruct 
+• azure_ai/genailab-maas-Llama-4-Maverick-17B-128E-Instruct-FP8 
+• azure_ai/genailab-maas-Phi-3.5-vision-instruct 
+• azure_ai/genailab-maas-Phi-4-reasoning 
+Instructions about Hackathon shared folder 
+• A shared folder has been created in genailab-maas-hackathon/Hackathon. 
+• Region-specific folders have been created within the Hackathon folder.  
+• Please use region-specific folders for keeping your important source code.  
+• Please avoid treating the file share as a local drive. Associates should perform 
+their regular tasks on the local drive only. 
+• Only important source code should be copied to the file share. Avoid copying 
+unnecessary files, such as folders containing the Python environment. 
+• The Location AI SPOC should be responsible for copying the required files from 
+the local folder to the file share. 
+• Only data from top-performing teams should be backed up to the archive file 
+share. 
+• Do not copy or create any files or folders in the root folder. 
+Sample Code- To Test the environment 
+!pip install langchain-openai 
+ | 14   
+from langchain_openai import ChatOpenAI  
+import os  
+import httpx  
+client = httpx.Client(verify=False) 
+llm = ChatOpenAI( 
+base_url="https://genailab.tcs.in" 
+model = "azure_ai/genailab-maas-DeepSeek-V3-0324", 
+api_key="XXXXXXXXXXX ", # Will be provided during event.  And this key is for 
+Hackathon purposes only and should not be used for any unauthorized 
+purposes 
+http_client = client 
+) 
+response = llm.invoke("Hi") 
+print(response) 
+It should produce welcome message from the LLM 
+13.8. 
+Sample Code- RAG Application 
+import streamlit as st 
+from pdfminer.high_level import extract_text 
+from langchain.text_splitter import RecursiveCharacterTextSplitter 
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings 
+from langchain_community.vectorstores import Chroma 
+from langchain.chains import RetrievalQA 
+import tempfile 
+import os 
+import httpx 
+client = httpx.Client(verify=False) 
+ | 15   
+ 
+ | 16   
+ 
+# LLM and Embedding setup 
+llm = ChatOpenAI( 
+   base_url="https://genailab.tcs.in", 
+   model="azure_ai/genailab-maas-DeepSeek-V3-0324", 
+   api_key=" YOUR KEY ", 
+   http_client=client 
+) 
+embedding_model = OpenAIEmbeddings( 
+   base_url="https://genailab.tcs.in", 
+   model="azure/genailab-maas-text-embedding-3-large", 
+   api_key=“YOUR KEY", 
+   http_client=client) 
+st.set_page_config(page_title="RAG PDF Summarizer") 
+st.title("     RAG-powered PDF Summarizer") 
+upload_file = st.file_uploader("Upload a PDF", type="pdf") 
+if upload_file: 
+   with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file: 
+       temp_file.write(upload_file.read()) 
+       temp_file_path = temp_file.name 
+   # Step 1: Extract text 
+   raw_text = extract_text(temp_file_path) 
+   # Step 2: Chunking 
+   text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap
+=200) 
+   chunks = text_splitter.split_text(raw_text) 
+   # Step 3: Embed and store in Chroma 
+ 
+ | 17   
+ 
+   with st.spinner("Indexing document..."): 
+       vectordb = Chroma.from_texts(chunks, embedding_model,persist_directory="
+./chroma_index") 
+       vectordb.persist() 
+   # Step 4: RAG QA Chain 
+   retriever = vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 
+5}) 
+   rag_chain = RetrievalQA.from_chain_type( 
+       llm=llm, 
+       retriever=retriever, 
+       return_source_documents=True 
+   ) 
+   # Step 5: Ask summarization prompt 
+   summary_prompt = "Please summarize this document based on the key topics:" 
+   with st.spinner("Running RAG summarization..."): 
+       # result = rag_chain.run(summary_prompt) 
+       result = rag_chain.invoke(summary_prompt) 
+   st.subheader("     Summary") 
+   st.write(result) 
+13.9. Regional SPOC D

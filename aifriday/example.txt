@@ -1,0 +1,42 @@
+Explore these areas - 
+ 
+Speech Equalizer
+User speaks:
+"M-m-m-my na-name i-is So-soumesh"
+System outputs:
+"My name is Soumesh"
+ 
+Mixed Language Recognition
+"Kal meeting ache at 5 PM"
+"Please mera appointment book kar do"
+ 
+ 
+Conversational Accessibility
+PAS strongly prefers:
+conversational interaction over command-based interaction
+Instead of:
+ 
+Plain Text
+Press 1
+Press 2
+Press 3
+ 
+Use:
+ 
+Plain Text
+Did you mean X?
+Can you repeat that?
+Would you like Bengali or English?
+ 
+5. Transparency
+PAS repeatedly mandates:
+User should know when:
+AI generated speech used
+Speech recognition used
+Translation used
+Display:
+ 
+Plain Text
+✓ Speech recognized by AI
+✓ Translation applied
+✓ Confidence: 94%
