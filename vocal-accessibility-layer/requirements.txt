@@ -1,0 +1,8 @@
+streamlit
+chromadb
+langchain-openai
+httpx
+requests
+faster-whisper
+numpy
+python-dotenv
