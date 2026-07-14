@@ -69,6 +69,11 @@ class GenAILabASRBackend(ASRBackend):
     def __init__(self):
         import httpx
 
+        if not config.GENAILAB_API_KEY:
+            raise RuntimeError(
+                "ASR_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
+                "environment) -- this is the key handed out on match day."
+            )
         self.client = httpx.Client(verify=False)
 
     def transcribe(self, audio_path: str) -> ASRResult:

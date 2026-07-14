@@ -5,7 +5,7 @@ from src import config
 
 
 class LLMBackend:
-    def complete(self, system: str, user: str, *, task: str = "") -> str:
+    def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
         raise NotImplementedError
 
 
@@ -19,9 +19,9 @@ class MockLLMBackend(LLMBackend):
     real thing.
     """
 
-    def complete(self, system: str, user: str, *, task: str = "") -> str:
+    def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
         if task == "equalizer":
-            return self._equalize(user)
+            return self._equalize(user, context)
         if task == "normalize":
             return self._normalize(user)
         if task == "orchestrate":
@@ -31,7 +31,12 @@ class MockLLMBackend(LLMBackend):
         return user
 
     @staticmethod
-    def _equalize(text: str) -> str:
+    def _equalize(text: str, context: dict = None) -> str:
+        # Personalization: apply any per-user corrections learned from past
+        # confirmations (e.g. a name the ASR keeps mangling) before the
+        # generic stutter cleanup below.
+        for wrong, right in (context or {}).items():
+            text = re.sub(re.escape(wrong), right, text, flags=re.IGNORECASE)
         # Collapse "M-m-my" / "na-name i-is" style stutter artifacts and
         # immediate word repeats -- a rough stand-in for an LLM cleanup pass.
         text = re.sub(r"\b(\w)(-\1)+\b", r"\1", text, flags=re.IGNORECASE)
@@ -57,10 +62,16 @@ class MockLLMBackend(LLMBackend):
     @staticmethod
     def _orchestrate(user: str) -> str:
         payload = json.loads(user)
-        text = payload.get("clean_text", "").lower()
-        for skill in payload.get("available_skills", []):
-            if any(kw in text for kw in skill.get("keywords", [])):
+        text = payload.get("clean_text", "")
+        lower = text.lower()
+        skills = payload.get("available_skills", [])
+        for skill in skills:
+            if skill["name"] == "general_help":
+                continue  # tried last, as the explicit fallback
+            if any(kw in lower for kw in skill.get("keywords", [])):
                 return json.dumps({"skill": skill["name"], "params": {}, "clarify": None})
+        if any(s["name"] == "general_help" for s in skills):
+            return json.dumps({"skill": "general_help", "params": {"message": text}, "clarify": None})
         return json.dumps(
             {
                 "skill": None,
@@ -86,7 +97,7 @@ class OllamaLLMBackend(LLMBackend):
 
         self._requests = requests
 
-    def complete(self, system: str, user: str, *, task: str = "") -> str:
+    def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
         resp = self._requests.post(
             f"{config.OLLAMA_HOST}/api/chat",
             json={
@@ -111,6 +122,11 @@ class GenAILabLLMBackend(LLMBackend):
         import httpx
         from langchain_openai import ChatOpenAI
 
+        if not config.GENAILAB_API_KEY:
+            raise RuntimeError(
+                "LLM_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
+                "environment) -- this is the key handed out on match day."
+            )
         client = httpx.Client(verify=False)
         self.llm = ChatOpenAI(
             base_url=config.GENAILAB_BASE_URL,
@@ -119,7 +135,7 @@ class GenAILabLLMBackend(LLMBackend):
             http_client=client,
         )
 
-    def complete(self, system: str, user: str, *, task: str = "") -> str:
+    def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
         response = self.llm.invoke(
             [
                 {"role": "system", "content": system},

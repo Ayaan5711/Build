@@ -39,24 +39,54 @@ Foundation layer (deterministic)
 
 Maps directly to PAS 901's five principles: Equalizer/Normalizer =
 **Understand**, Orchestrator's conversational routing = **Simplify**, the
-skill/fallback design = **Adapt**, Guardrail = **Assure**, Transparency
-layer = **Trust**.
+skill/fallback design + text↔voice alternatives = **Adapt**, Guardrail =
+**Assure**, Transparency layer = **Trust**.
+
+## Features (all working end-to-end today)
+
+- **Live microphone input** — `st.audio_input` in the Streamlit app records
+  directly in the browser, no plugins needed. File upload and a text box
+  (dev/testing) are also available as input modes.
+- **Speech Equalizer** — cleans disfluent/stuttered transcripts.
+- **Personalization loop** — confirm a correction once ("So-soumesh" →
+  "Soumesh") via the "Personalize" panel in the app, and it's applied
+  automatically on every future run, for this user, without retraining
+  anything.
+- **Mixed-language / intent extraction** — structured intent + detected
+  languages, not word-for-word translation.
+- **Agentic routing with a real fallback** — the orchestrator routes to a
+  skill; if nothing matches, it falls through to `general_help` instead of
+  failing silently (PAS 901 "Assure": always give feedback).
+- **Guardrail** — blocks/holds an action when ASR confidence is low and
+  asks for confirmation instead of guessing.
+- **Transparency badges** — confidence %, what was corrected, what
+  languages were detected, what action was taken.
+- **Spoken response (optional)** — offline text-to-speech via `espeak-ng`
+  reads the result back, so the interaction can be voice-in/voice-out, not
+  just voice-in/text-out. Degrades gracefully (skips audio, shows a clear
+  error) if `espeak-ng` isn't installed rather than crashing the app.
 
 ## Backends (dev vs match day)
 
 Nothing here requires the real hackathon API key to develop against. Every
-external dependency is swappable via env vars (see `.env.example`):
+external dependency is swappable via env vars (see `.env.example`) —
+**change the config, the same app runs against real models with no code
+changes**:
 
 | Component | `mock` (default, offline) | `local` / `ollama` (offline, lab laptops) | `event` (match day) |
 |---|---|---|---|
 | ASR | reads a sibling `.txt` transcript | `faster-whisper` | `genailab.tcs.in` Whisper endpoint |
 | LLM | deterministic rule-based stand-in | Ollama (`llama3.2:3b` etc.) | `genailab.tcs.in` (DeepSeek-V3, GPT-4o, ...) |
 | Embeddings | hashed bag-of-words | — | `genailab.tcs.in` `text-embedding-3-large` |
+| TTS | off (no audio) | `espeak-ng` (offline) | — (no TTS model in the provided list) |
 
 The `mock` backends exist only to make the pipeline testable with zero
 network/model access — they are not real language understanding. Switch
-`ASR_BACKEND` / `LLM_BACKEND` / `EMBED_BACKEND` (see `.env.example`) once you
-have real access.
+`ASR_BACKEND` / `LLM_BACKEND` / `EMBED_BACKEND` / `TTS_BACKEND` (see
+`.env.example`) once you have real access. Every `event`-backend class
+fails fast with a clear `RuntimeError` if `GENAILAB_API_KEY` is missing,
+instead of crashing deep inside a request — the app catches this and shows
+it as a readable error instead of a stack trace.
 
 ## Running
 
@@ -94,21 +124,23 @@ python -m pytest tests/ -v
 ## Project layout
 
 ```
-app.py                      # Streamlit UI, wires the pipeline together
+app.py                      # Streamlit UI: mic/file/text input, personalize
+                             # panel, pipeline run, transparency badges, TTS
 src/
   config.py                 # backend selection + all tunables
   llm.py                    # LLM backend abstraction (mock/ollama/event)
   foundation/
     asr.py                  # ASR backend abstraction (mock/local/event)
-    equalizer.py             # disfluency cleanup
+    equalizer.py             # disfluency cleanup + personalization
     normalizer.py             # intent + language extraction
+    tts.py                    # TTS backend abstraction (mock/local)
   agent/
-    orchestrator.py          # routes to a skill via the LLM
+    orchestrator.py          # routes to a skill via the LLM, general_help fallback
     guardrail.py              # confidence gate before acting
     memory.py                  # Chroma-backed corrections + FAQ retrieval
   skills/
     base.py                   # Skill interface
-    faq_lookup.py, schedule_reminder.py   # example skills
+    faq_lookup.py, schedule_reminder.py, general_help.py   # example skills
     __init__.py                # auto-registry
   transparency.py            # confidence/correction/routing badges
 notebooks/pipeline_demo.ipynb # walkthrough notebook (submission requirement)
@@ -127,3 +159,10 @@ tests/test_pipeline_smoke.py # end-to-end wiring test on mock backends
 - Guardrail/orchestrator prompts are a first pass — tune them once running
   against a real LLM backend, responses from `mock` are intentionally
   simplistic.
+- `espeak-ng` (TTS) wasn't in the hackathon's preinstalled software list —
+  if it's not available on the lab laptop, leave `TTS_BACKEND=mock` and the
+  app runs exactly the same, just without spoken responses.
+- `LocalWhisperBackend` (faster-whisper) and `OllamaLLMBackend` are written
+  but unverified in this dev environment specifically — it has no route to
+  Hugging Face (to download Whisper weights) or a running Ollama server.
+  Verify these once on a machine that has both.

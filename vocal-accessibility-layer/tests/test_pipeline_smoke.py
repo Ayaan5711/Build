@@ -69,6 +69,54 @@ def test_skill_registry_discovers_all_skills():
     skills = get_skills()
     assert "faq_lookup" in skills
     assert "schedule_reminder" in skills
+    assert "general_help" in skills
+
+
+def test_personalization_applies_saved_correction(tmp_path):
+    llm = get_llm_backend()
+    memory = Memory(user_id=f"test-personalize-{tmp_path.name}")
+    memory.add_correction("So-soumesh", "Soumesh")
+
+    known = memory.get_known_corrections()
+    eq_result = equalize("My name is So-soumesh", llm, known_corrections=known)
+    assert "Soumesh" in eq_result.clean_text
+    assert "So-soumesh" not in eq_result.clean_text
+
+
+def test_general_help_is_the_fallback_not_a_hard_failure():
+    """No skill should ever come back empty-handed -- unmatched input routes
+    to general_help instead of silently failing (PAS 901 'Assure')."""
+    llm = get_llm_backend()
+    memory = Memory(user_id="test-fallback")
+    text = "the weather is nice today"
+    orch_result = orchestrate("unknown", {}, text, llm)
+    assert orch_result.skill_name == "general_help"
+
+    skill = get_skills()["general_help"]
+    result = skill.run(orch_result.params, memory)
+    assert result.success
+    assert text in result.output
+
+
+def test_event_backend_fails_fast_without_api_key(monkeypatch):
+    """Misconfiguration should raise a clear error immediately, not fail
+    cryptically deep inside a request."""
+    from src import config
+    from src.llm import GenAILabLLMBackend
+
+    monkeypatch.setattr(config, "GENAILAB_API_KEY", "")
+    try:
+        GenAILabLLMBackend()
+        assert False, "expected RuntimeError for missing API key"
+    except RuntimeError as e:
+        assert "GENAILAB_API_KEY" in str(e)
+
+
+def test_tts_mock_backend_is_a_safe_noop():
+    from src.foundation.tts import get_tts_backend
+
+    tts = get_tts_backend()
+    assert tts.speak("hello") is None
 
 
 def test_new_skill_can_be_added_without_touching_orchestrator(tmp_path):

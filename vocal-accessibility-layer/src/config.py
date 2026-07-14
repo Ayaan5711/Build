@@ -6,6 +6,7 @@ import os
 ASR_BACKEND = os.getenv("ASR_BACKEND", "mock")  # mock | local | event
 LLM_BACKEND = os.getenv("LLM_BACKEND", "mock")  # mock | ollama | event
 EMBED_BACKEND = os.getenv("EMBED_BACKEND", "mock")  # mock | event
+TTS_BACKEND = os.getenv("TTS_BACKEND", "mock")  # mock | local (espeak-ng, offline)
 
 # Event-day (genailab.tcs.in) settings -- key is handed out on match day.
 GENAILAB_BASE_URL = os.getenv("GENAILAB_BASE_URL", "https://genailab.tcs.in")

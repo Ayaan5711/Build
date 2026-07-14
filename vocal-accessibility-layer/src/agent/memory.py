@@ -46,6 +46,11 @@ class GenAILabEmbeddingFunction(EmbeddingFunction):
     def __init__(self):
         import httpx
 
+        if not config.GENAILAB_API_KEY:
+            raise RuntimeError(
+                "EMBED_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
+                "environment) -- this is the key handed out on match day."
+            )
         self.client = httpx.Client(verify=False)
 
     def __call__(self, input):
