@@ -75,10 +75,15 @@ changes**:
 
 | Component | `mock` (default, offline) | `local` / `ollama` (offline, lab laptops) | `event` (match day) |
 |---|---|---|---|
-| ASR | reads a sibling `.txt` transcript | `faster-whisper` | `genailab.tcs.in` Whisper endpoint |
-| LLM | deterministic rule-based stand-in | Ollama (`llama3.2:3b` etc.) | `genailab.tcs.in` (DeepSeek-V3, GPT-4o, ...) |
-| Embeddings | hashed bag-of-words | — | `genailab.tcs.in` `text-embedding-3-large` |
+| ASR | reads a sibling `.txt` transcript | `faster-whisper` | `genailab.tcs.in` — `azure/genailab-maas-whisper` |
+| LLM | deterministic rule-based stand-in | Ollama — `llama-3.2-3b-it:latest` (confirmed via `ollama list` on the lab hardware; also available: `qwen-2.5.1-coder-it`, `gemma-3-4b-it`, `deepseek-r1`) | `genailab.tcs.in` — `azure/genailab-maas-gpt-4o-mini` default |
+| Embeddings | hashed bag-of-words | Ollama — `gte-large:latest` | `genailab.tcs.in` — `azure/genailab-maas-text-embedding-3-large` |
 | TTS | off (no audio) | `espeak-ng` (offline) | — (no TTS model in the provided list) |
+
+Ollama model names are confirmed against the actual `ollama list` output on
+the lab machines — they don't match the upstream Ollama Hub tags (it's
+`llama-3.2-3b-it:latest`, not `llama3.2:3b`). Always sanity-check with
+`ollama list` on the machine you're on before assuming a tag exists.
 
 The `mock` backends exist only to make the pipeline testable with zero
 network/model access — they are not real language understanding. Switch

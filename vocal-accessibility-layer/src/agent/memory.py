@@ -74,9 +74,45 @@ class GenAILabEmbeddingFunction(EmbeddingFunction):
         return GenAILabEmbeddingFunction()
 
 
+class OllamaEmbeddingFunction(EmbeddingFunction):
+    """Offline fallback using Ollama's locally-pulled gte-large model --
+    keeps personalization/FAQ retrieval working even if genailab.tcs.in is
+    unreachable during the demo."""
+
+    def __init__(self):
+        import requests
+
+        self._requests = requests
+
+    def __call__(self, input):
+        vectors = []
+        for text in input:
+            resp = self._requests.post(
+                f"{config.OLLAMA_HOST}/api/embeddings",
+                json={"model": config.OLLAMA_EMBED_MODEL, "prompt": text},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            vectors.append(resp.json()["embedding"])
+        return vectors
+
+    @staticmethod
+    def name() -> str:
+        return "vocal_accessibility_ollama_embedding"
+
+    def get_config(self):
+        return {}
+
+    @staticmethod
+    def build_from_config(config_dict):
+        return OllamaEmbeddingFunction()
+
+
 def _get_embedding_function():
     if config.EMBED_BACKEND == "event":
         return GenAILabEmbeddingFunction()
+    if config.EMBED_BACKEND == "ollama":
+        return OllamaEmbeddingFunction()
     return MockEmbeddingFunction()
 
 
