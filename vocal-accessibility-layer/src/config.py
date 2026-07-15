@@ -1,5 +1,9 @@
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Backend selection. Each defaults to "mock" so the pipeline runs anywhere
 # with zero external dependencies; switch via env vars once real access
 # (Ollama, or the genailab.tcs.in event endpoint) is available.
