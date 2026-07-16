@@ -321,7 +321,7 @@ function renderResult(r) {
   $("captionLine").textContent = `Caption: ${r.visual_equivalent.caption}`;
   $("finalResponse").textContent = r.final_response.text;
 
-  renderRecovery(r.recovery_options);
+  renderRecovery(r.recovery_options, r.original_input.confidence * 100, r.accessibility_report.barriers_detected);
 
   $("confirmedBanner").hidden = true;
   $("correctPanel").hidden = true;
@@ -435,7 +435,7 @@ function renderLatency(r) {
 // -------------------------------------------------------- recovery/FR-16 --
 const RECOVERY_LABELS = { confirm: "Confirm", correct: "Correct", retry: "Retry", switch_modality: "Switch Modality" };
 
-function renderRecovery(recovery) {
+function renderRecovery(recovery, confidencePct, barriers) {
   const container = $("recoveryButtons");
   container.innerHTML = "";
   recovery.options.forEach((opt) => {
@@ -446,7 +446,31 @@ function renderRecovery(recovery) {
     btn.addEventListener("click", () => handleRecoveryAction(opt));
     container.appendChild(btn);
   });
-  $("recoveryReason").textContent = recovery.needs_confirmation ? `Confirmation requested: ${recovery.reason}` : "";
+
+  const explainer = $("recoveryExplainer");
+  if (recovery.needs_confirmation) {
+    explainer.className = "banner banner-warning";
+    explainer.innerHTML = `<strong>Please review before continuing.</strong> ${explainWhyReviewIsNeeded(confidencePct, barriers, recovery.reason)}`;
+  } else {
+    explainer.className = "banner banner-success";
+    explainer.textContent = "This looks good — click Confirm to proceed, or use another option if something's off.";
+  }
+}
+
+// Turns the recovery decision into a specific, plain-language reason
+// instead of a bare "confirmation requested" -- so it's clear WHY, not
+// just that a click is required.
+function explainWhyReviewIsNeeded(confidencePct, barriers, fallbackReason) {
+  const parts = [];
+  if (confidencePct < 60) {
+    parts.push(`speech confidence was only ${Math.round(confidencePct)}% (often background noise, an accent, or unclear audio)`);
+  }
+  if (barriers.includes("speech_impairment")) parts.push("a disfluency (repeated words/sounds) was detected and cleaned up");
+  if (barriers.includes("multilingual_code_mixing")) parts.push("mixed languages were detected");
+  if (barriers.includes("noise_or_accent_uncertainty") && confidencePct >= 60) parts.push("the system wasn't fully certain it heard you correctly");
+  if (barriers.includes("sign_or_gesture_interaction")) parts.push("a gesture was interpreted, not spoken words");
+  if (!parts.length) parts.push(fallbackReason || "the system wants to double-check before acting");
+  return "Why: " + parts.join("; ") + ".";
 }
 
 function handleRecoveryAction(action) {

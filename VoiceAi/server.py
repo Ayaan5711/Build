@@ -7,8 +7,10 @@ this one exists for full visual control over the dashboard.
 Run: uvicorn server:app --host 0.0.0.0 --port 8000
 """
 import dataclasses
+import logging
 import os
 import tempfile
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -25,12 +27,26 @@ from src.pipeline import run_pipeline
 from src.response.recovery_intent import match_recovery_intent
 from src.skills import get_skills
 
+# uvicorn's own access log only shows "POST /api/run 200 OK" -- nothing
+# about what happened inside. This logger prints what backend/profile is
+# active, what each request actually did (transcript, barriers, agent
+# steps, response), timing, and full tracebacks on failure, all visible in
+# the terminal where `uvicorn server:app` is running.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s", datefmt="%H:%M:%S")
+log = logging.getLogger("voiceai")
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
+    log.info(
+        "Starting TCS iON Voice AI | PROFILE=%s ASR=%s VISION=%s LLM(default)=%s EMBED=%s | budget cap=$%.2f",
+        config.PROFILE, config.ASR_BACKEND, config.VISION_BACKEND, config.LLM_BACKEND or "(per-role)", config.EMBED_BACKEND,
+        config.BUDGET_USD_CAP,
+    )
     kb = KnowledgeBase()
     if kb.collection.count() == 0:
         seed_default_knowledge_base(kb)
+        log.info("Seeded knowledge base with default PAS 901 + FAQ content")
     yield
 
 
@@ -80,6 +96,9 @@ async def api_run(
     the current cost summary."""
     audio_path = None
     image_path = None
+    modality = "mic" if audio else ("camera" if image else "text")
+    started = time.perf_counter()
+    log.info("POST /api/run | modality=%s | text=%r", modality, (text or "")[:80])
     try:
         audio_path = await _save_upload(audio, ".wav")
         image_path = await _save_upload(image, ".jpg")
@@ -89,10 +108,31 @@ async def api_run(
         result = run_pipeline(audio_path=audio_path, image_path=image_path, text_override=text, user_id=_USER_ID)
         payload = dataclasses.asdict(result)
         payload["cost"] = _cost_summary()
+
+        elapsed = (time.perf_counter() - started) * 1000
+        log.info(
+            "  -> heard=%r | accessible=%r | barriers=%s | agent: %d step(s) using %s | response=%r",
+            result.original_input.text[:80],
+            result.accessible_transcript.text[:80],
+            result.accessibility_report.barriers_detected,
+            len(result.agent_result.steps),
+            result.agent_result.skills_used or "none",
+            result.final_response.text[:100],
+        )
+        log.info(
+            "  -> confidence=%.0f%% | needs_confirmation=%s | fallback=%s | total=%.0fms (pipeline) / %.0fms (request) | cost=$%.4f",
+            result.original_input.confidence * 100,
+            result.recovery_options.needs_confirmation,
+            result.used_fallback_cache,
+            result.total_ms,
+            elapsed,
+            payload["cost"]["total_usd"],
+        )
         return payload
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001 -- surface as a clean API error, not a 500 stack trace
+        log.exception("  -> FAILED: %s", e)
         raise HTTPException(500, f"Pipeline error: {e}")
     finally:
         for p in (audio_path, image_path):
@@ -112,8 +152,10 @@ async def api_transcribe(audio: UploadFile = File(...)):
         raise HTTPException(400, "No audio provided.")
     try:
         result = get_asr_backend().transcribe(audio_path)
+        log.info("POST /api/transcribe -> heard=%r (confidence=%.0f%%)", result.text[:80], result.confidence * 100)
         return {"text": result.text, "confidence": result.confidence}
     except Exception as e:  # noqa: BLE001
+        log.exception("  -> transcription FAILED: %s", e)
         raise HTTPException(500, f"Transcription error: {e}")
     finally:
         if os.path.exists(audio_path):
@@ -139,8 +181,12 @@ async def api_recovery_intent(audio: UploadFile = File(...), options: str = Form
         available = _json.loads(options)
         transcript = get_asr_backend().transcribe(audio_path)
         matched = match_recovery_intent(transcript.text, available)
+        log.info(
+            "POST /api/recovery-intent | options=%s | heard=%r -> matched=%s", available, transcript.text[:80], matched
+        )
         return {"heard": transcript.text, "matched_action": matched}
     except Exception as e:  # noqa: BLE001
+        log.exception("  -> recovery-intent FAILED: %s", e)
         raise HTTPException(500, f"Recovery-intent matching error: {e}")
     finally:
         if os.path.exists(audio_path):
@@ -153,6 +199,7 @@ async def api_correction(original: str = Form(...), corrected: str = Form(...)):
     normalize_transcript() applies it automatically next time."""
     memory = UserMemory(user_id=_USER_ID)
     memory.add_correction(original, corrected)
+    log.info("POST /api/correction | %r -> %r", original, corrected)
     return {"status": "ok", "corrections": memory.get_known_corrections()}
 
 

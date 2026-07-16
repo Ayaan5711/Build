@@ -236,13 +236,40 @@ if result:
 
     # --- Screen 10: recovery options (wired, not decorative) ----------------
     st.header("10. Confirm or recover")
+
+    def _explain_why_review_needed(confidence_pct, barriers, fallback_reason):
+        parts = []
+        if confidence_pct < 60:
+            parts.append(f"speech confidence was only {confidence_pct:.0f}% (often background noise, an accent, or unclear audio)")
+        if "speech_impairment" in barriers:
+            parts.append("a disfluency (repeated words/sounds) was detected and cleaned up")
+        if "multilingual_code_mixing" in barriers:
+            parts.append("mixed languages were detected")
+        if "noise_or_accent_uncertainty" in barriers and confidence_pct >= 60:
+            parts.append("the system wasn't fully certain it heard you correctly")
+        if "sign_or_gesture_interaction" in barriers:
+            parts.append("a gesture was interpreted, not spoken words")
+        if not parts:
+            parts.append(fallback_reason or "the system wants to double-check before acting")
+        return "Why: " + "; ".join(parts) + "."
+
+    if result.recovery_options.needs_confirmation:
+        st.warning(
+            "**Please review before continuing.** "
+            + _explain_why_review_needed(
+                result.original_input.confidence * 100,
+                result.accessibility_report.barriers_detected,
+                result.recovery_options.reason,
+            )
+        )
+    else:
+        st.success("This looks good -- click Confirm to proceed, or use another option if something's off.")
+
     labels = {"confirm": "Confirm", "correct": "Correct", "retry": "Retry", "switch_modality": "Switch Modality"}
     callbacks = {"confirm": _confirm, "correct": _correct, "retry": _retry, "switch_modality": _switch_modality}
     cols = st.columns(len(result.recovery_options.options))
     for col, option in zip(cols, result.recovery_options.options):
         col.button(labels.get(option, option), key=f"rec_{option}", on_click=callbacks.get(option))
-    if result.recovery_options.needs_confirmation:
-        st.caption(f"Confirmation requested: {result.recovery_options.reason}")
 
     if ss.confirmed:
         st.success("Confirmed -- the action would now proceed.")
