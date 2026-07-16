@@ -323,10 +323,19 @@ function renderResult(r) {
 
   $("confirmedBanner").hidden = true;
   $("correctPanel").hidden = true;
+  $("recoveryListenStatus").textContent = "";
 
-  // --- Voice output: speak the response (and any clarifying question) ---
+  // --- Voice output: speak the response (and any clarifying question), in
+  // the language the user actually used, if a matching voice exists. If
+  // voice-driven confirmation is enabled, auto-listen for a spoken reply
+  // once speaking finishes, so a speak-and-listen-only user never has to
+  // click Confirm/Correct/Retry/Switch Modality. ---
   const toSpeak = r.accent_noise_report.clarifying_question || r.final_response.text;
-  speakText(toSpeak);
+  const options = r.recovery_options.options || [];
+  const voiceRecoveryOn = $("voiceRecoveryToggle").checked;
+  speakText(toSpeak, r.language_report.languages_detected, () => {
+    if (voiceRecoveryOn && options.length) autoListenForRecovery(options);
+  });
 }
 
 function fillList(id, items) {
@@ -452,16 +461,106 @@ $("applyCorrectionBtn").addEventListener("click", async () => {
 });
 
 $("replayVoiceBtn").addEventListener("click", () => {
-  if (state.lastResult) speakText(state.lastResult.final_response.text);
+  if (state.lastResult) speakText(state.lastResult.final_response.text, state.lastResult.language_report.languages_detected);
 });
 
 // --------------------------------------------------------- voice output --
-function speakText(text) {
-  if (!text || !("speechSynthesis" in window)) return;
+// BCP-47 tags for the language codes our detector emits (src/analysis/language.py).
+const LANG_BCP47 = { en: "en-US", hi: "hi-IN", bn: "bn-IN" };
+
+let _voicesCache = [];
+function refreshVoices() {
+  _voicesCache = window.speechSynthesis.getVoices();
+}
+if ("speechSynthesis" in window) {
+  refreshVoices();
+  window.speechSynthesis.onvoiceschanged = refreshVoices; // Chrome loads voices async
+}
+
+function speakText(text, languagesDetected, onend) {
+  if (!text || !("speechSynthesis" in window)) {
+    if (onend) onend();
+    return;
+  }
   window.speechSynthesis.cancel(); // don't stack utterances across turns
   const utter = new SpeechSynthesisUtterance(text);
   utter.rate = 1.0;
+
+  // Prefer the non-English detected language (the one worth voicing
+  // correctly); fall back to English if that's all that was detected.
+  const langs = languagesDetected && languagesDetected.length ? languagesDetected : ["en"];
+  const primary = langs.find((l) => l !== "en") || langs[0] || "en";
+  const bcp47 = LANG_BCP47[primary] || "en-US";
+  utter.lang = bcp47;
+
+  const voices = _voicesCache.length ? _voicesCache : window.speechSynthesis.getVoices();
+  const match = voices.find((v) => v.lang && v.lang.toLowerCase().startsWith(primary));
+  if (match) utter.voice = match;
+  // If no matching voice is installed on this machine/browser, speechSynthesis
+  // falls back to its default voice automatically -- pronunciation of
+  // non-Latin-script text won't be accurate, but nothing breaks. That's a
+  // real OS/voice-pack constraint, not something JS can work around.
+
+  if (onend) {
+    utter.onend = onend;
+    utter.onerror = onend; // still try to listen even if TTS itself failed
+  }
   window.speechSynthesis.speak(utter);
+}
+
+// ------------------------------------------- voice-driven recovery (FR-16) --
+// Completes the loop for a speak-and-listen-only user: after the response is
+// spoken, auto-listen for a short reply ("yes", "retry", "that's wrong",
+// "switch") and match it via /api/recovery-intent, instead of requiring a
+// click. Opt-in (see #voiceRecoveryToggle) so the mic doesn't activate
+// unexpectedly for someone using text/camera mode.
+const AUTO_LISTEN_MS = 4000;
+
+async function autoListenForRecovery(options) {
+  const statusEl = $("recoveryListenStatus");
+  statusEl.textContent = "Listening for your reply (yes / retry / that's wrong / switch)…";
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    statusEl.textContent = ""; // mic denied/unavailable -- silently fall back to manual buttons
+    return;
+  }
+  try {
+    const recorder = new MediaRecorder(stream);
+    const chunks = [];
+    recorder.ondataavailable = (e) => chunks.push(e.data);
+    const stopped = new Promise((resolve) => {
+      recorder.onstop = resolve;
+    });
+    recorder.start();
+    setTimeout(() => {
+      if (recorder.state === "recording") recorder.stop();
+    }, AUTO_LISTEN_MS);
+    await stopped;
+    stream.getTracks().forEach((t) => t.stop());
+
+    statusEl.textContent = "Processing your reply…";
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    const form = new FormData();
+    form.append("audio", blob, "recovery.webm");
+    form.append("options", JSON.stringify(options));
+    const res = await fetch("/api/recovery-intent", { method: "POST", body: form });
+    if (!res.ok) throw new Error(await res.text());
+    const data = await res.json();
+
+    if (data.matched_action) {
+      statusEl.textContent = `Heard "${data.heard}" → ${RECOVERY_LABELS[data.matched_action] || data.matched_action}`;
+      handleRecoveryAction(data.matched_action);
+    } else if (data.heard) {
+      statusEl.textContent = `Heard "${data.heard}" — didn't match an action, use a button below if needed.`;
+    } else {
+      statusEl.textContent = "Didn't catch a reply — use a button below if needed.";
+    }
+  } catch (err) {
+    stream.getTracks().forEach((t) => t.stop());
+    statusEl.textContent = ""; // background convenience feature -- fail quietly, buttons remain
+  }
 }
 
 // ------------------------------------------------------------------ init --

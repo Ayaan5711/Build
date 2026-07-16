@@ -168,6 +168,7 @@ def _run_pipeline_live(
             accessibility_report,
             response_llm,
             skill_output=agent_result.combined_output or None,
+            languages_detected=language_report.languages_detected,
         )
 
     with _stage(timings, "recovery decision (reasoning LLM)"):

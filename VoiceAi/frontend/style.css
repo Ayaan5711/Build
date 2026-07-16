@@ -190,6 +190,19 @@ a, button, input, textarea, summary {
   border-color: var(--accent);
 }
 
+.voice-toggle {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: #10181f;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  margin-bottom: 0.9rem;
+  line-height: 1.4;
+}
+.voice-toggle input { margin-right: 0.4rem; }
+
 .mode-panel { margin-bottom: 0.75rem; }
 
 .status-text { margin-left: 0.6rem; color: var(--muted); }

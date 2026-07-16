@@ -22,6 +22,7 @@ from src.input.microphone import get_asr_backend
 from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
 from src.pipeline import run_pipeline
+from src.response.recovery_intent import match_recovery_intent
 from src.skills import get_skills
 
 
@@ -114,6 +115,33 @@ async def api_transcribe(audio: UploadFile = File(...)):
         return {"text": result.text, "confidence": result.confidence}
     except Exception as e:  # noqa: BLE001
         raise HTTPException(500, f"Transcription error: {e}")
+    finally:
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
+
+@app.post("/api/recovery-intent")
+async def api_recovery_intent(audio: UploadFile = File(...), options: str = Form(...)):
+    """
+    Voice-driven recovery (FR-16 completed for a speak-and-listen-only
+    user): transcribes a short spoken reply and matches it against the
+    recovery actions currently offered (confirm/correct/retry/
+    switch_modality), so confirming or retrying never requires a click.
+    `options` is a JSON-encoded list of the option strings currently shown
+    (matches result.recovery_options.options from the last /api/run).
+    """
+    import json as _json
+
+    audio_path = await _save_upload(audio, ".wav")
+    if not audio_path:
+        raise HTTPException(400, "No audio provided.")
+    try:
+        available = _json.loads(options)
+        transcript = get_asr_backend().transcribe(audio_path)
+        matched = match_recovery_intent(transcript.text, available)
+        return {"heard": transcript.text, "matched_action": matched}
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(500, f"Recovery-intent matching error: {e}")
     finally:
         if os.path.exists(audio_path):
             os.remove(audio_path)
