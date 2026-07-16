@@ -58,18 +58,19 @@ def test_run_with_no_input_returns_400():
 
 
 def test_run_with_audio_file_upload():
-    """MockASRBackend reads a sibling .txt for the given path -- so we
-    exercise the actual multipart file-upload code path end to end, even
-    though the mock ignores the uploaded bytes and reads its .txt stand-in
-    is NOT what happens here; this confirms the upload plumbing itself
-    doesn't error, which is what matters for the API contract."""
+    """A real recorded/uploaded clip has no matching .txt fixture, so
+    MockASRBackend returns an honest placeholder explaining the ASR_BACKEND
+    setting is wrong for live audio -- it must NOT silently substitute an
+    unrelated cached demo scenario (that was a real bug: it always showed
+    demo #1 "book appointment" regardless of what was actually said,
+    because the NFR-03 outage-fallback path was being triggered by a
+    config mismatch, not a real backend failure)."""
     fake_audio = io.BytesIO(b"not a real wav, just exercising upload plumbing")
     r = client.post("/api/run", files={"audio": ("clip.wav", fake_audio, "audio/wav")})
-    # MockASRBackend looks for a sibling .txt of the temp upload path, which
-    # won't exist -> pipeline should fail gracefully and fall back to a
-    # cached scenario (NFR-03) rather than 500.
     assert r.status_code == 200
-    assert r.json()["used_fallback_cache"] is True
+    body = r.json()
+    assert body["used_fallback_cache"] is False
+    assert "mock ASR" in body["original_input"]["text"]
 
 
 def test_transcribe_endpoint_requires_audio():

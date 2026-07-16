@@ -86,11 +86,11 @@ def test_recovery_intent_empty_input():
 
 
 # --------------------------------------------------------------- API endpoint --
-def test_recovery_intent_endpoint_fails_clean_without_sidecar_transcript():
+def test_recovery_intent_endpoint_without_sidecar_transcript_gives_no_match():
     """MockASRBackend requires a sibling .txt next to the audio path; a
-    real upload's temp path won't have one. Confirms the endpoint surfaces
-    this as a clean 500 (not an unhandled crash) rather than silently
-    returning a wrong match."""
+    real upload's temp path won't have one, so it returns an honest
+    placeholder (not a crash, and not a silent wrong guess) -- that
+    placeholder correctly matches none of the offered recovery actions."""
     import io
 
     from fastapi.testclient import TestClient
@@ -104,8 +104,10 @@ def test_recovery_intent_endpoint_fails_clean_without_sidecar_transcript():
         files={"audio": ("clip.wav", audio, "audio/wav")},
         data={"options": '["confirm", "retry"]'},
     )
-    assert r.status_code == 500
-    assert "Recovery-intent matching error" in r.json()["detail"]
+    assert r.status_code == 200
+    body = r.json()
+    assert "mock ASR" in body["heard"]
+    assert body["matched_action"] is None
 
 
 def test_recovery_intent_endpoint_matches_confirm_with_real_transcript(tmp_path, monkeypatch):

@@ -13,7 +13,7 @@ from src.analysis.accent_noise import analyze_accent_noise_confidence
 from src.analysis.disfluency import detect_stammering
 from src.analysis.language import detect_language_mix
 from src.input.merge import merge_inputs
-from src.input.microphone import Transcript
+from src.input.microphone import MockASRBackend, Transcript
 from src.input.vision import GestureResult, MockVisionBackend
 from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
@@ -30,6 +30,34 @@ def test_full_pipeline_via_text_override(tmp_path):
     assert "speech_impairment" in result.accessibility_report.barriers_detected
     assert result.final_response.text
     assert result.recovery_options is not None
+
+
+def test_mock_asr_known_fixture_still_works(tmp_path):
+    """The sample fixture (data/sample_audio/example1.wav -> example1.txt)
+    must keep working normally -- this fix only changes behavior for real
+    recordings that have no matching fixture."""
+    fixture_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sample_audio", "example1.wav"
+    )
+    result = MockASRBackend().transcribe(fixture_path)
+    assert "book" in result.text.lower()
+    assert result.confidence == 0.75
+
+
+def test_mock_asr_real_recording_gives_honest_placeholder_not_a_crash(tmp_path):
+    """A real recorded/uploaded clip (e.g. a browser mic recording saved to
+    a random temp path) has no matching .txt fixture. This must NOT raise
+    (which used to trigger the NFR-03 cached-scenario fallback and show an
+    unrelated canned demo response regardless of what was actually said --
+    a real bug found via live testing) -- it must return a clear message
+    telling the user to switch ASR_BACKEND."""
+    fake_path = os.path.join(str(tmp_path), "some_random_recording_12345.wav")
+    with open(fake_path, "wb") as f:
+        f.write(b"not a real wav, just a stand-in for a browser recording")
+    result = MockASRBackend().transcribe(fake_path)
+    assert "mock ASR" in result.text
+    assert "ASR_BACKEND" in result.text
+    assert result.confidence == 0.0
 
 
 def test_pipeline_records_per_stage_timings(tmp_path):

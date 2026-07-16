@@ -110,6 +110,11 @@ async def api_run(
         payload["cost"] = _cost_summary()
 
         elapsed = (time.perf_counter() - started) * 1000
+        if result.used_fallback_cache:
+            # Loud on purpose -- this means the LIVE pipeline failed and a
+            # cached demo scenario was substituted (NFR-03). Easy to miss
+            # as a plain INFO line buried between normal requests.
+            log.warning("  -> ### FALLBACK TO CACHED SCENARIO ### reason: %s", result.fallback_reason)
         log.info(
             "  -> heard=%r | accessible=%r | barriers=%s | agent: %d step(s) using %s | response=%r",
             result.original_input.text[:80],

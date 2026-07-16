@@ -33,6 +33,21 @@ class MockASRBackend(ASRBackend):
 
     def transcribe(self, audio_path: str) -> Transcript:
         transcript_path = os.path.splitext(audio_path)[0] + ".txt"
+        if not os.path.exists(transcript_path):
+            # A real recorded/uploaded clip has no fixture transcript in mock
+            # mode -- say so plainly instead of raising, which would trigger
+            # the NFR-03 cached-scenario fallback and silently show an
+            # unrelated canned demo response (confusing: looks like the
+            # system ignored what was actually said). Raising here is
+            # reserved for genuine backend outages, not "wrong ASR_BACKEND
+            # for what you're trying to do".
+            return Transcript(
+                text=(
+                    "[mock ASR: this is a live recording, not one of the sample fixtures -- "
+                    "set ASR_BACKEND=local or ASR_BACKEND=event in .env for real transcription]"
+                ),
+                confidence=0.0,
+            )
         with open(transcript_path) as f:
             text = f.read().strip()
         return Transcript(text=text, confidence=0.75, segments=[TranscriptSegment(text, 0.75)])

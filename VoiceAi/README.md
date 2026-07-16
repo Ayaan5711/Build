@@ -216,7 +216,7 @@ docs/PRD.md                      # the actual PRD, verbatim
 
 ## Known limitations (by design, for now)
 
-- `mock` backends are plumbing stand-ins, not real understanding -- swap before the live demo.
+- `mock` backends are plumbing stand-ins, not real understanding -- swap before the live demo. **Important:** `ASR_BACKEND=mock` (the `mock` profile's default) can only "transcribe" the pre-made fixture files in `data/sample_audio/` (it reads a matching `.txt` sidecar) -- it cannot handle a real microphone recording or uploaded clip. If you record real audio while on `ASR_BACKEND=mock`, you'll get a clear placeholder message telling you to switch to `local` or `event`, instead of a real transcript. (Earlier builds silently substituted an unrelated cached demo scenario here instead -- that was a real bug, fixed.) Use `ASR_BACKEND=local` (or the `local`/`fast`/`hybrid`/`hosted` profiles) to actually transcribe live speech.
 - `data/sample_audio/` and `data/sample_gestures/` have placeholder stand-ins, not real recordings/photos -- capture real ones on the lab hardware before the event.
 - `LocalWhisperBackend`, `MediaPipeVisionBackend`, and `OllamaLLMBackend` are written correctly but unverified in the dev sandbox this was built in (no route to Hugging Face for model weights, no camera/mic hardware, no running Ollama server there) -- verify each on the actual lab laptop.
 - `st.camera_input`/`st.audio_input` capture a snapshot/recording per turn, not a continuous stream -- matches the PRD's own "predefined gesture capture" MVP scope; true continuous video would need `streamlit-webrtc`, out of scope.
