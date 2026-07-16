@@ -5,14 +5,19 @@
    which would auto-clean disfluent speech before our Speech Equalizer ever
    sees it and defeat the whole accessibility-detection story.
    Voice output: browser speechSynthesis -- free, zero backend, works
-   offline once the page is loaded. */
+   offline once the page is loaded.
+
+   Interaction model: conversational, not a pipeline-operator's console.
+   One tap starts a turn; the pipeline stage names, buttons, and "Run"
+   click that used to be here are gone -- see README's "Interaction
+   redesign" note for the reasoning (real user feedback that the previous
+   click-record/click-stop/click-run/click-confirm flow felt mechanical). */
 
 // ---------------------------------------------------------------- state --
 const state = {
   mode: "mic", // mic | camera | text
   micStream: null,
   micRecorder: null,
-  micChunks: [],
   micBlob: null,
   cameraStream: null,
   gestureBlob: null,
@@ -68,40 +73,110 @@ $("resetCostBtn").addEventListener("click", async () => {
   renderCost(cost);
 });
 
-// ------------------------------------------------------------ mode tabs --
-function setMode(mode) {
-  state.mode = mode;
-  document.querySelectorAll(".mode-tab").forEach((btn) => {
-    const active = btn.dataset.mode === mode;
-    btn.classList.toggle("active", active);
-    btn.setAttribute("aria-selected", String(active));
-  });
-  ["mic", "camera", "text"].forEach((m) => {
-    $(`mode-${m}`).hidden = m !== mode;
-  });
-  updateRunEnabled();
-}
-
-document.querySelectorAll(".mode-tab").forEach((btn) => {
-  btn.addEventListener("click", () => setMode(btn.dataset.mode));
+// ------------------------------------------------------- sidebar toggle --
+$("sidebarToggle").addEventListener("click", () => {
+  const willShow = $("sidebar").hidden;
+  $("sidebar").hidden = !willShow;
+  $("layoutRoot").classList.toggle("sidebar-open", willShow);
+  $("sidebarToggle").setAttribute("aria-expanded", String(willShow));
 });
 
-function updateRunEnabled() {
-  let enabled = false;
-  if (state.mode === "mic") enabled = !!state.micBlob;
-  else if (state.mode === "camera") enabled = !!state.gestureBlob;
-  else if (state.mode === "text") enabled = $("textInput").value.trim().length > 0;
-  $("runBtn").disabled = !enabled;
+// ------------------------------------------------------- details toggle --
+$("detailsToggle").addEventListener("click", () => {
+  const el = $("resultSection");
+  el.hidden = !el.hidden;
+  $("detailsToggle").textContent = el.hidden ? "🔍 Show what's happening under the hood" : "🔼 Hide details";
+});
+
+// -------------------------------------------------------------- modality --
+// Driven by: the "use a gesture / type instead" links, and voice-driven
+// "switch modality" recovery. Each mode has exactly one obvious next
+// action -- tap the orb, show a gesture, or type and send -- no separate
+// enable/arm step before that action is available.
+function setMode(mode) {
+  state.mode = mode;
+  ["mic", "camera", "text"].forEach((m) => {
+    $(`stage-${m}`).hidden = m !== mode;
+  });
+  document.querySelectorAll("#convoAltRow [data-switch]").forEach((btn) => {
+    btn.hidden = btn.dataset.switch === mode;
+  });
+  if (mode === "camera") startGestureCapture();
+  else if (mode === "text") $("convoTextInput").focus();
+  else setOrbState("idle");
 }
-$("textInput").addEventListener("input", updateRunEnabled);
+
+document.querySelectorAll("#convoAltRow [data-switch]").forEach((btn) => {
+  btn.addEventListener("click", () => setMode(btn.dataset.switch));
+});
 
 // --------------------------------------------------------- mic recording --
-async function toggleMicRecording() {
-  const btn = $("micRecordBtn");
-  if (state.micRecorder && state.micRecorder.state === "recording") {
-    state.micRecorder.stop();
-    return;
+// One tap starts listening. It stops on its own after a generous silence
+// window -- generous on purpose: this app exists partly to handle speech
+// with long pauses and repeated sounds (FR-03), so an aggressive "stop as
+// soon as it goes quiet" timeout would clip off the exact speech pattern
+// we're supposed to support. A second tap always stops it manually too.
+const SILENCE_RMS_THRESHOLD = 0.02;
+const SILENCE_GRACE_MS = 5000;
+const MAX_RECORD_MS = 25000;
+
+let _silenceCtx = null;
+let _silenceRAF = null;
+
+function startSilenceWatch(stream, onTimeout) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) return; // no Web Audio support -- MAX record cap / manual tap still stop it
+  _silenceCtx = new AudioCtx();
+  const source = _silenceCtx.createMediaStreamSource(stream);
+  const analyser = _silenceCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  source.connect(analyser);
+  const data = new Float32Array(analyser.fftSize);
+  const startedAt = Date.now();
+  let lastLoudAt = startedAt;
+  let hasSpokenYet = false;
+
+  function tick() {
+    analyser.getFloatTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+    const rms = Math.sqrt(sum / data.length);
+    const now = Date.now();
+    if (rms > SILENCE_RMS_THRESHOLD) {
+      lastLoudAt = now;
+      hasSpokenYet = true;
+    }
+    if (hasSpokenYet && now - lastLoudAt > SILENCE_GRACE_MS) return onTimeout();
+    if (now - startedAt > MAX_RECORD_MS) return onTimeout();
+    _silenceRAF = requestAnimationFrame(tick);
   }
+  _silenceRAF = requestAnimationFrame(tick);
+}
+
+function stopSilenceWatch() {
+  if (_silenceRAF) cancelAnimationFrame(_silenceRAF);
+  _silenceRAF = null;
+  if (_silenceCtx) {
+    _silenceCtx.close();
+    _silenceCtx = null;
+  }
+}
+
+function setOrbState(s) {
+  const orb = $("talkOrb");
+  orb.classList.remove("listening", "processing");
+  if (s === "listening") {
+    orb.classList.add("listening");
+    $("orbCaption").textContent = "Listening… tap again when you're done";
+  } else if (s === "processing") {
+    orb.classList.add("processing");
+    $("orbCaption").textContent = "Working on it…";
+  } else {
+    $("orbCaption").textContent = "Tap to talk";
+  }
+}
+
+async function startMicCapture() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     state.micStream = stream;
@@ -109,49 +184,82 @@ async function toggleMicRecording() {
     const chunks = [];
     recorder.ondataavailable = (e) => chunks.push(e.data);
     recorder.onstop = () => {
-      state.micBlob = new Blob(chunks, { type: "audio/webm" });
-      $("micPreview").src = URL.createObjectURL(state.micBlob);
-      $("micPreview").hidden = false;
-      $("micStatus").textContent = "Captured. Click Run below.";
-      btn.textContent = "🎙 Start recording";
+      stopSilenceWatch();
       stream.getTracks().forEach((t) => t.stop());
-      updateRunEnabled();
+      state.micBlob = new Blob(chunks, { type: "audio/webm" });
+      runPipeline({ audioBlob: state.micBlob });
     };
     recorder.start();
     state.micRecorder = recorder;
-    btn.textContent = "⏹ Stop recording";
-    $("micStatus").textContent = "Recording… speak now.";
+    setOrbState("listening");
+    startSilenceWatch(stream, () => {
+      if (recorder.state === "recording") recorder.stop();
+    });
   } catch (err) {
     showFallbackBanner(`Microphone access failed: ${err.message}`);
   }
 }
-$("micRecordBtn").addEventListener("click", toggleMicRecording);
+
+$("talkOrb").addEventListener("click", () => {
+  if (state.micRecorder && state.micRecorder.state === "recording") {
+    state.micRecorder.stop(); // manual stop, always available
+    return;
+  }
+  setMode("mic");
+  startMicCapture();
+});
 
 // ------------------------------------------------------------ camera/gesture --
-$("cameraStartBtn").addEventListener("click", async () => {
+// One action ("use a gesture instead") opens the camera and captures on a
+// short countdown automatically -- no separate enable/capture/run clicks.
+async function startGestureCapture() {
+  $("gestureCountdown").textContent = "Starting camera…";
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
     state.cameraStream = stream;
-    $("cameraPreview").srcObject = stream;
-    $("cameraCaptureBtn").disabled = false;
+    $("convoCameraPreview").srcObject = stream;
+    runGestureCountdown();
   } catch (err) {
     showFallbackBanner(`Camera access failed: ${err.message}`);
   }
-});
+}
 
-$("cameraCaptureBtn").addEventListener("click", () => {
-  const video = $("cameraPreview");
-  const canvas = $("cameraCanvas");
+function runGestureCountdown() {
+  let n = 3;
+  $("gestureCountdown").textContent = `Hold your gesture… capturing in ${n}`;
+  const timer = setInterval(() => {
+    n -= 1;
+    if (n <= 0) {
+      clearInterval(timer);
+      captureGestureFrame();
+    } else {
+      $("gestureCountdown").textContent = `Hold your gesture… capturing in ${n}`;
+    }
+  }, 1000);
+}
+
+function captureGestureFrame() {
+  const video = $("convoCameraPreview");
+  const canvas = $("convoCameraCanvas");
   canvas.width = video.videoWidth || 320;
   canvas.height = video.videoHeight || 240;
   canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
   canvas.toBlob((blob) => {
     state.gestureBlob = blob;
-    const img = $("capturedGesturePreview");
-    img.src = URL.createObjectURL(blob);
-    img.hidden = false;
-    updateRunEnabled();
+    if (state.cameraStream) state.cameraStream.getTracks().forEach((t) => t.stop());
+    runPipeline({ imageBlob: blob });
   }, "image/jpeg");
+}
+
+// ---------------------------------------------------------------- text --
+$("convoTextSend").addEventListener("click", () => {
+  const text = $("convoTextInput").value.trim();
+  if (!text) return;
+  runPipeline({ text });
+  $("convoTextInput").value = "";
+});
+$("convoTextInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("convoTextSend").click();
 });
 
 // -------------------------------------------------------- push-to-talk fields --
@@ -183,7 +291,6 @@ async function togglePushToTalk(btn) {
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
         $(targetId).value = data.text;
-        updateRunEnabled();
       } catch (err) {
         showFallbackBanner(`Transcription failed: ${err.message}`);
       }
@@ -210,38 +317,63 @@ $("saveCorrectionBtn").addEventListener("click", async () => {
   loadCorrections();
 });
 
-// ------------------------------------------------------------------ run --
-$("runBtn").addEventListener("click", () => {
-  if (state.mode === "mic") runPipeline({ audioBlob: state.micBlob });
-  else if (state.mode === "camera") runPipeline({ imageBlob: state.gestureBlob });
-  else runPipeline({ text: $("textInput").value.trim() });
-});
+// ------------------------------------------------- humanized status ticker --
+// /api/run is a single blocking call -- there's no live per-stage progress
+// feed (that would need websockets/SSE, out of scope tonight). This ticker
+// is a best-effort, timer-driven approximation so the wait feels like
+// something is happening rather than a dead spinner; it is NOT wired to
+// real server-side stage completion. The real per-stage timings are shown
+// afterwards in the (opt-in) latency panel, which is accurate.
+const STATUS_PHRASES = [
+  "Got it, one moment…",
+  "Understanding what you said…",
+  "Checking what I can do about that…",
+  "Putting together a response…",
+];
+let _tickerInterval = null;
 
+function startStatusTicker() {
+  const el = $("convoStatus");
+  el.hidden = false;
+  let i = 0;
+  el.textContent = STATUS_PHRASES[0];
+  _tickerInterval = setInterval(() => {
+    i = (i + 1) % STATUS_PHRASES.length;
+    el.textContent = STATUS_PHRASES[i];
+  }, 2200);
+}
+
+function stopStatusTicker() {
+  if (_tickerInterval) clearInterval(_tickerInterval);
+  _tickerInterval = null;
+  $("convoStatus").hidden = true;
+}
+
+// ------------------------------------------------------------------ run --
 async function runPipeline({ audioBlob = null, imageBlob = null, text = null }) {
   state.lastRun = { audioBlob, imageBlob, text };
-  $("runBtn").disabled = true;
-  $("runBtn").textContent = "Processing…";
   $("fallbackBanner").hidden = true;
+  if (state.mode === "mic") setOrbState("processing");
+  if (state.mode !== "text") speakText("Got it, one moment.", null);
+  startStatusTicker();
   try {
     const form = new FormData();
     if (audioBlob) form.append("audio", audioBlob, "input.webm");
     if (imageBlob) form.append("image", imageBlob, "input.jpg");
     if (text) form.append("text", text);
     const res = await fetch("/api/run", { method: "POST", body: form });
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText);
-    }
+    if (!res.ok) throw new Error(await res.text());
     const result = await res.json();
     state.lastResult = result;
     renderResult(result);
     renderCost(result.cost);
     renderLatency(result);
   } catch (err) {
-    showFallbackBanner(`Pipeline error: ${err.message}`);
+    showFallbackBanner(`Something went wrong: ${err.message}`);
+    speakText("Sorry, something went wrong. Please try again.", null);
   } finally {
-    $("runBtn").textContent = "Run";
-    updateRunEnabled();
+    stopStatusTicker();
+    if (state.mode === "mic") setOrbState("idle");
   }
 }
 
@@ -253,16 +385,18 @@ function showFallbackBanner(msg) {
 
 // -------------------------------------------------------------- render --
 function renderResult(r) {
-  $("resultSection").hidden = false;
+  $("detailsToggle").hidden = false;
 
   if (r.used_fallback_cache) {
-    showFallbackBanner(`FALLBACK MODE: ${r.fallback_reason}`);
+    showFallbackBanner(`Using a cached example response — live processing failed (${r.fallback_reason}).`);
   }
 
-  $("originalInputOut").value = r.original_input.text;
-  $("accessibleTranscriptOut").value = r.accessible_transcript.text;
-  $("modalityConfidence").textContent =
-    `Modality: ${r.original_input.modality} · Confidence: ${Math.round(r.original_input.confidence * 100)}%`;
+  // ---- primary, conversational view --------------------------------
+  $("convoResult").hidden = false;
+  $("convoHeard").textContent = `I heard: "${r.original_input.text}"`;
+  $("convoResponse").textContent = r.final_response.text;
+  $("captionLine").textContent = r.visual_equivalent.caption;
+  $("actionPreview").textContent = r.visual_equivalent.action_preview;
 
   const clarify = $("clarifyingQuestion");
   if (r.accent_noise_report.clarifying_question) {
@@ -271,6 +405,17 @@ function renderResult(r) {
   } else {
     clarify.hidden = true;
   }
+
+  renderRecovery(r.recovery_options, r.original_input.confidence * 100, r.accessibility_report.barriers_detected);
+  $("confirmedBanner").hidden = true;
+  $("correctPanel").hidden = true;
+  $("recoveryListenStatus").textContent = "";
+
+  // ---- secondary, technical detail view (collapsed by default) ------
+  $("originalInputOut").value = r.original_input.text;
+  $("accessibleTranscriptOut").value = r.accessible_transcript.text;
+  $("modalityConfidence").textContent =
+    `Modality: ${r.original_input.modality} · Confidence: ${Math.round(r.original_input.confidence * 100)}%`;
 
   fillList("barriersList", r.accessibility_report.barriers_detected);
   fillList("supportList", r.accessibility_report.support_applied);
@@ -306,7 +451,7 @@ function renderResult(r) {
     2
   );
 
-  $("ragSummary").textContent = `View Retrieved Context (${r.retrieved_context.length} snippets)`;
+  $("ragSummary").textContent = `View retrieved context (${r.retrieved_context.length} snippets)`;
   const ragEl = $("ragContext");
   ragEl.innerHTML = "";
   r.retrieved_context.forEach((s) => {
@@ -317,21 +462,12 @@ function renderResult(r) {
 
   renderAgentTrace(r.agent_result);
 
-  $("actionPreview").textContent = r.visual_equivalent.action_preview;
-  $("captionLine").textContent = `Caption: ${r.visual_equivalent.caption}`;
-  $("finalResponse").textContent = r.final_response.text;
-
-  renderRecovery(r.recovery_options, r.original_input.confidence * 100, r.accessibility_report.barriers_detected);
-
-  $("confirmedBanner").hidden = true;
-  $("correctPanel").hidden = true;
-  $("recoveryListenStatus").textContent = "";
-
-  // --- Voice output: speak the response (and any clarifying question), in
-  // the language the user actually used, if a matching voice exists. If
-  // voice-driven confirmation is enabled, auto-listen for a spoken reply
-  // once speaking finishes, so a speak-and-listen-only user never has to
-  // click Confirm/Correct/Retry/Switch Modality. ---
+  // ---- voice output ---------------------------------------------------
+  // Speak the response (or clarifying question) in the language the user
+  // actually used, if a matching voice exists. Voice-driven recovery is on
+  // by default -- the whole point of a voice-first tool is that the voice
+  // controls the interface, not the other way around -- but stays an easy
+  // opt-out for anyone who'd rather always tap a button.
   const toSpeak = r.accent_noise_report.clarifying_question || r.final_response.text;
   const options = r.recovery_options.options || [];
   const voiceRecoveryOn = $("voiceRecoveryToggle").checked;
@@ -441,7 +577,7 @@ function renderRecovery(recovery, confidencePct, barriers) {
   recovery.options.forEach((opt) => {
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = "btn";
+    btn.className = "btn btn-pill";
     btn.textContent = RECOVERY_LABELS[opt] || opt;
     btn.addEventListener("click", () => handleRecoveryAction(opt));
     container.appendChild(btn);
@@ -453,13 +589,13 @@ function renderRecovery(recovery, confidencePct, barriers) {
     explainer.innerHTML = `<strong>Please review before continuing.</strong> ${explainWhyReviewIsNeeded(confidencePct, barriers, recovery.reason)}`;
   } else {
     explainer.className = "banner banner-success";
-    explainer.textContent = "This looks good — click Confirm to proceed, or use another option if something's off.";
+    explainer.textContent = "This looks good — tap Confirm to proceed, or use another option if something's off.";
   }
 }
 
 // Turns the recovery decision into a specific, plain-language reason
 // instead of a bare "confirmation requested" -- so it's clear WHY, not
-// just that a click is required.
+// just that a tap is required.
 function explainWhyReviewIsNeeded(confidencePct, barriers, fallbackReason) {
   const parts = [];
   if (confidencePct < 60) {
@@ -553,8 +689,9 @@ function speakText(text, languagesDetected, onend) {
 // Completes the loop for a speak-and-listen-only user: after the response is
 // spoken, auto-listen for a short reply ("yes", "retry", "that's wrong",
 // "switch") and match it via /api/recovery-intent, instead of requiring a
-// click. Opt-in (see #voiceRecoveryToggle) so the mic doesn't activate
-// unexpectedly for someone using text/camera mode.
+// tap. On by default (see #voiceRecoveryToggle) -- voice should control the
+// interface, not the other way around -- but it's a one-tap opt-out for
+// anyone who'd rather always use the buttons.
 const AUTO_LISTEN_MS = 4000;
 
 async function autoListenForRecovery(options) {

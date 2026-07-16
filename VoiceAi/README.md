@@ -8,6 +8,52 @@ If a human can understand the speaker, AI should be able to understand them too.
 
 Not a single-purpose voice app -- a pipeline that treats voice as one modality among several (mic, camera/sign, text), detects real accessibility barriers (speech impairments, accents, code-mixed language, noise, sign interaction, cognitive load), and grounds every response in retrieved knowledge before presenting it for confirmation. The actual match-day use case isn't known yet; new domain behavior is added as one new file in `src/skills/`, with zero changes to the core pipeline (see "Adding a new skill" below).
 
+## Interaction redesign -- conversational, not a pipeline console
+
+The original UI (both the HTML/JS frontend and Streamlit) exposed the pipeline
+directly: separate clicks to enable mic/camera, start recording, stop
+recording, click Run, then read a wall of numbered technical sections before
+a final confirm click. Real user feedback on it: "it feels very mechanical...
+like I'm operating a pipeline, not talking to an assistant." For a
+voice-accessibility product, that's a real defect, not a cosmetic one -- the
+whole point is that the voice should control the interface, not the other
+way around.
+
+What changed (HTML/JS frontend, `frontend/`):
+- **One tap starts a turn.** A single "talk orb" replaces the old
+  enable/start/stop/Run sequence. Recording auto-stops on its own via a
+  client-side RMS silence detector (`frontend/app.js`), then auto-submits --
+  no separate Run click anywhere in the app now.
+- **The silence window is deliberately generous (5s) with a 25s hard cap,**
+  not a snappy ChatGPT-Voice-style cutoff. This app exists partly to handle
+  speech with long pauses and repeated sounds (FR-03); an aggressive
+  auto-stop would clip off exactly the speech pattern it's supposed to
+  support. A second tap always stops it manually too.
+- **Gesture capture collapses to one action:** "Use a gesture instead" opens
+  the camera and auto-captures on a 3-2-1 countdown -- no separate
+  enable/capture/Run clicks.
+- **Technical detail is opt-in, not the default view.** Original transcript,
+  barriers, intent JSON, RAG snippets, and the agent trace still exist
+  (PRD's own NFR-08 transparency requirement), just behind a "Show what's
+  happening under the hood" toggle instead of being the first thing shown.
+  The cost/latency/skills panel moved the same way, behind a small ⚙ toggle.
+- **Status narration is humanized** ("Understanding what you said…" instead
+  of stage names) and voice-driven recovery (auto-listening for a spoken
+  "yes"/"retry"/"switch" reply) is now **on by default** instead of opt-in --
+  matching "voice controls the interface," with an easy one-tap opt-out.
+- Two real bugs were found while verifying this in a real browser (Playwright
+  + Chromium's fake-media-device flags, driving actual `MediaRecorder`/
+  `getUserMedia` capture, not just unit tests) -- see "Known limitations"
+  below for both.
+
+Streamlit (`app.py`) got the same philosophy applied within its real
+platform constraints: `st.audio_input`/`st.camera_input` always show their
+own native record/stop controls (a Streamlit limitation, not something this
+codebase can remove without a custom component, out of scope tonight) --
+what moved is the separate "Run" click (capture now auto-triggers the
+pipeline) and the wall of numbered sections (now a confirmation-first
+summary with the full technical detail collapsed into one expander).
+
 ## Architecture
 
 Mirrors the PRD's Appendix A pipeline exactly, stage for stage:
@@ -223,6 +269,7 @@ docs/PRD.md                      # the actual PRD, verbatim
 - **`.env` gotcha, found via live testing:** don't put a value and a trailing `# comment` on the same line when the value is meant to be blank (e.g. `VISION_BACKEND=   # mock | local`) -- `python-dotenv` does NOT strip the comment in that case; it treats the entire comment as the literal value. `.env.example` was fixed to put comments on their own line instead, and `config.py` now validates every `*_BACKEND`/`PROFILE` value and ignores (with a clear warning printed at startup) anything that isn't a recognized option, so a stray comment or typo can no longer silently break backend routing.
 - `st.camera_input`/`st.audio_input` capture a snapshot/recording per turn, not a continuous stream -- matches the PRD's own "predefined gesture capture" MVP scope; true continuous video would need `streamlit-webrtc`, out of scope.
 - The mock LLM's cleanup pass is a regex heuristic, not real disfluency repair -- it's there so the pipeline is testable offline, not to demo quality. Use `LLM_BACKEND=ollama` or `event` for anything you'd actually show a judge.
-- The HTML/CSS/JS frontend (`frontend/` + `server.py`) is verified via FastAPI's `TestClient` (in-process HTTP) and a live `uvicorn` boot with `curl` -- both prove the API contract and every route works. What's **not** verified here: actual browser behavior (`MediaRecorder`, `getUserMedia`, `speechSynthesis` autoplay policies) -- this sandbox has no browser or mic/camera hardware to click through with. Open it in a real browser on the lab laptop before trusting it live; if `speechSynthesis` gets blocked by an autoplay policy, the "Replay voice response" button is the manual fallback.
+- The HTML/CSS/JS frontend (`frontend/` + `server.py`) is verified via FastAPI's `TestClient`, a live `uvicorn` boot with `curl`, **and now a real headless-Chromium session (Playwright, launched with `--use-fake-device-for-media-stream`/`--use-fake-ui-for-media-stream` and a real WAV fed to `--use-file-for-fake-audio-capture`)** driving actual `MediaRecorder`/`getUserMedia` capture end to end -- tap-to-talk, real-audio silence auto-stop, auto-submit, gesture auto-capture, and the details/sidebar toggles all confirmed working in an actual browser, not just via API calls. What's still **not** verified: real human speech/gestures and `speechSynthesis` autoplay/voice-pack behavior, since this sandbox has no real mic/camera/speakers. If `speechSynthesis` gets blocked by an autoplay policy, the "Replay voice response" button is the manual fallback.
+- **Two real bugs found via that Playwright verification, both fixed:** (1) `.result-section { display: block; }` in `style.css` was unconditionally overriding the `hidden` attribute on the technical-details panel -- meaning it was visibly rendering (empty) on page load even before any interaction, which likely contributed to the original "feels like a monitor/log screen" complaint. Removed; visibility is now purely driven by the `hidden` attribute and the "Show details" toggle. (2) `MockVisionBackend.interpret()` had the exact same failure shape the mock ASR backend used to have: it raised `FileNotFoundError` for a real captured gesture image (no sidecar `.json` fixture), which the pipeline's NFR-03 resilience layer silently caught and replaced with an unrelated cached demo scenario -- meaning the redesigned one-tap gesture flow would have silently shown a fake "book an appointment" response for *any* real gesture captured under `VISION_BACKEND=mock` (the default profile's setting). Fixed the same way the ASR bug was: return an honest "no gesture detected" result instead of raising. Both have regression tests (`test_gesture_mock_backend_real_capture_gives_no_gesture_not_a_crash` in `tests/test_pipeline_smoke.py`).
 - Language-matched replies depend on the LLM backend actually following the instruction -- only meaningful with `LLM_BACKEND=ollama` or `event`; the `mock` backend always ignores it (plumbing stub, documented above). Language-matched TTS voice depends on the OS/browser having a Hindi/Bengali voice pack installed -- if not, `speechSynthesis` falls back to the default voice and pronunciation of non-Latin-script text won't be accurate. Neither of these is something the code can fix; both are real hardware/OS constraints, verify on the lab machine.
 - Voice-driven recovery's keyword phrase lists (`src/response/recovery_intent.py`) are a first pass, not user-tested -- tune the phrase lists if real users phrase confirm/retry/correct/switch differently than expected. It's rule-based specifically so this is a five-minute edit, not a prompt-engineering exercise.

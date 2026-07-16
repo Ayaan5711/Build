@@ -40,6 +40,16 @@ class MockVisionBackend(VisionBackend):
 
     def interpret(self, image_path: str) -> GestureResult:
         meta_path = os.path.splitext(image_path)[0] + ".json"
+        if not os.path.exists(meta_path):
+            # A real captured frame has no fixture label in mock mode -- say
+            # so plainly instead of raising, which would trigger the NFR-03
+            # cached-scenario fallback and silently show an unrelated canned
+            # demo response (same failure shape the mock ASR backend used to
+            # have -- found via live browser testing of a real gesture
+            # capture). Raising here is reserved for genuine backend
+            # outages, not "wrong VISION_BACKEND for what you're trying to
+            # do".
+            return GestureResult(gesture=None, confidence=0.0, candidate_intent=None)
         with open(meta_path) as f:
             data = json.load(f)
         gesture = data.get("gesture")

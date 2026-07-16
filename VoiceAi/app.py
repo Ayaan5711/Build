@@ -1,3 +1,5 @@
+import hashlib
+
 import streamlit as st
 
 from src import config
@@ -6,7 +8,9 @@ from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
 from src.pipeline import run_pipeline
 
-st.set_page_config(page_title="TCS iON Voice AI", layout="wide")
+# Sidebar starts collapsed -- it's cost/latency/tooling detail for a judge or
+# developer, not the first thing a voice-accessibility user should see.
+st.set_page_config(page_title="TCS iON Voice AI", layout="wide", initial_sidebar_state="collapsed")
 ss = st.session_state
 
 user_memory = UserMemory(user_id="demo-user")
@@ -89,11 +93,8 @@ with st.sidebar:
         slow_first = dict(sorted(ss.result.timings_ms.items(), key=lambda kv: -kv[1]))
         st.write({k: f"{v/1000:.2f} s" for k, v in slow_first.items()})
 
-st.title("TCS iON Voice AI -- AI for Every Voice")
-st.caption(
-    f"ASR: {config.ASR_BACKEND} · Vision: {config.VISION_BACKEND} · Embed: {config.EMBED_BACKEND} · "
-    f"Profile: {config.PROFILE}"
-)
+st.title("TCS iON Voice AI")
+st.caption("Hi. What would you like help with?")
 
 with st.expander("Privacy note", expanded=False):
     st.write(
@@ -102,9 +103,50 @@ with st.expander("Privacy note", expanded=False):
         "Nothing is acted on without your confirmation."
     )
 
-# --- Screen 1: choose modality ---------------------------------------------
-st.header("1. Choose how to interact")
-mode = st.radio("Input modality (Multimodal Fallback, FR-15)", MODES, horizontal=True, key="input_mode")
+mode = st.radio("How would you like to interact?", MODES, horizontal=True, key="input_mode", label_visibility="collapsed")
+
+audio_path = None
+image_path = None
+text_override = None
+
+# One capture auto-runs the pipeline immediately -- no separate "Run" click.
+# st.audio_input/st.camera_input still show Streamlit's own native
+# record/stop controls (a Streamlit platform constraint we can't remove
+# without a custom component); what we control -- the extra click after
+# that to actually process it -- is gone.
+if mode == "Start Listening":
+    mic_audio = st.audio_input("Tap to talk")
+    if mic_audio:
+        audio_bytes = mic_audio.read()
+        digest = hashlib.md5(audio_bytes).hexdigest()
+        if ss.get("last_mic_digest") != digest:
+            ss.last_mic_digest = digest
+            audio_path = "captured_audio.wav"
+            with open(audio_path, "wb") as f:
+                f.write(audio_bytes)
+            with st.spinner("Got it, one moment…"):
+                do_run(audio_path=audio_path)
+elif mode == "Start Camera":
+    st.caption("Predefined gestures: thumbs up = confirm, open palm = help, fist = correct/cancel, pointing = select, peace = switch modality.")
+    camera_image = st.camera_input("Show your gesture")
+    if camera_image:
+        image_bytes = camera_image.read()
+        digest = hashlib.md5(image_bytes).hexdigest()
+        if ss.get("last_camera_digest") != digest:
+            ss.last_camera_digest = digest
+            image_path = "captured_gesture.jpg"
+            with open(image_path, "wb") as f:
+                f.write(image_bytes)
+            with st.spinner("Got it, one moment…"):
+                do_run(image_path=image_path)
+else:
+    with st.form("text_form", clear_on_submit=False):
+        text_override = st.text_input("Type what you'd like help with:", "B-b-b-book appointment tomorrow")
+        sent = st.form_submit_button("Send", type="primary")
+    if sent and text_override.strip():
+        with st.spinner("Got it, one moment…"):
+            do_run(text_override=text_override)
+    text_override = None  # already handled above -- don't let the block below re-trigger it
 
 with st.expander("Personalize (optional) -- teach it a word/name it keeps mishearing"):
     known = user_memory.get_known_corrections()
@@ -118,124 +160,18 @@ with st.expander("Personalize (optional) -- teach it a word/name it keeps mishea
         st.success(f"Saved: '{wrong_word}' -> '{right_word}'.")
         st.rerun()
 
-audio_path = None
-image_path = None
-text_override = None
-
-if mode == "Start Listening":
-    mic_audio = st.audio_input("Recording... speak now")
-    if mic_audio:
-        audio_path = "captured_audio.wav"
-        with open(audio_path, "wb") as f:
-            f.write(mic_audio.read())
-        st.success("Captured. Click Run below.")
-elif mode == "Start Camera":
-    st.caption("Predefined gestures: thumbs up = confirm, open palm = help, fist = correct/cancel, pointing = select, peace = switch modality.")
-    camera_image = st.camera_input("Camera active -- show a gesture")
-    if camera_image:
-        image_path = "captured_gesture.jpg"
-        with open(image_path, "wb") as f:
-            f.write(camera_image.read())
-        st.success("Captured. Click Run below.")
-else:
-    text_override = st.text_input(
-        "Type what you'd say (stands in for speech/sign until live capture is verified):",
-        "B-b-b-book appointment tomorrow",
-    )
-
-if st.button("Run", type="primary", disabled=not (audio_path or image_path or text_override)):
-    with st.spinner("Processing..."):
-        do_run(audio_path=audio_path, image_path=image_path, text_override=text_override)
-
 # --- Render the latest result (persists across recovery-button reruns) ------
 result = ss.result
 if result:
     if result.used_fallback_cache:
         st.warning(f"FALLBACK MODE: {result.fallback_reason}")
 
-    st.header("2-4. What was heard / understood")
-    c1, c2 = st.columns(2)
-    c1.text_area("Original input", result.original_input.text, height=80)
-    c2.text_area("Accessible transcript", result.accessible_transcript.text, height=80)
-    st.caption(f"Modality: {result.original_input.modality} · Confidence: {result.original_input.confidence:.0%}")
+    st.caption(f'I heard: "{result.original_input.text}"')
     if result.accent_noise_report.clarifying_question:
         st.info(f"Clarifying question: {result.accent_noise_report.clarifying_question}")
-
-    st.header("5-6. Accessibility barrier & support applied")
-    bcol, scol = st.columns(2)
-    bcol.write("**Barriers detected:**")
-    for b in result.accessibility_report.barriers_detected:
-        bcol.markdown(f"- {b}")
-    scol.write("**Support applied:**")
-    for s in result.accessibility_report.support_applied:
-        scol.markdown(f"- {s}")
-    if result.language_report.code_mixed:
-        st.caption(f"Languages detected: {', '.join(result.language_report.languages_detected)}")
-
-    with st.expander("Detection evidence (raw detector output, not just the conclusion)"):
-        d = result.disfluency_report
-        st.write(f"Has disfluency: {d.has_disfluency}")
-        if d.repeated_syllables:
-            st.write(f"Repeated syllables: {', '.join(d.repeated_syllables)}")
-        if d.repeated_words:
-            st.write(f"Repeated words: {', '.join(d.repeated_words)}")
-        if d.filler_words_found:
-            st.write(f"Filler words: {', '.join(d.filler_words_found)}")
-        if d.long_pause_markers:
-            st.write(f"Long pause markers: {d.long_pause_markers}")
-        if result.language_report.romanized_markers:
-            st.write(f"Language markers: {', '.join(result.language_report.romanized_markers)}")
-
-    if result.simplified_steps.was_simplified:
-        st.subheader("Step-by-step (cognitive load reduction)")
-        for i, step in enumerate(result.simplified_steps.steps, 1):
-            st.markdown(f"{i}. {step}")
-
-    st.header("7. Detected intent")
-    st.json(
-        {
-            "goal": result.intent.goal,
-            "action_type": result.intent.action_type,
-            "entities": result.intent.entities,
-            "constraints": result.intent.constraints,
-            "urgency": result.intent.urgency,
-            "missing_information": result.intent.missing_information,
-        }
-    )
-
-    with st.expander(f"View Retrieved Context ({len(result.retrieved_context)} snippets)"):
-        for snippet in result.retrieved_context:
-            st.markdown(f"**{snippet.title}** ({snippet.source})")
-            st.write(snippet.content)
-
-    # --- Agent reasoning trace (the agentic flow, made visible) -------------
-    st.header("8b. Agent reasoning trace")
-    agent = result.agent_result
-    st.caption(
-        f"{len(agent.steps)} step(s) · tools used: {', '.join(agent.skills_used) or 'none'}"
-        + (" · hit step cap" if agent.hit_max_steps else "")
-    )
-    for step in agent.steps:
-        icon = {"call_skill": "🔧", "clarify": "❓", "finish": "✅"}.get(step.action, "•")
-        with st.expander(f"{icon} Step {step.step}: {step.action}" + (f" → {step.skill}" if step.skill else "")):
-            st.markdown(f"**Thought:** {step.thought}")
-            if step.skill:
-                st.markdown(f"**Tool:** `{step.skill}`  ·  **Params:** `{step.params}`")
-            if step.observation:
-                st.markdown(f"**Observation:** {step.observation}")
-            if step.question:
-                st.markdown(f"**Clarifying question:** {step.question}")
-    if agent.clarification:
-        st.info(f"Agent needs clarification: {agent.clarification}")
-
-    st.header("9. Action preview & confirmation")
-    st.info(result.visual_equivalent.action_preview)
+    st.subheader(result.final_response.text)
     st.caption(f"Caption: {result.visual_equivalent.caption}")
-    st.subheader("Final response")
-    st.success(result.final_response.text)
-
-    # --- Screen 10: recovery options (wired, not decorative) ----------------
-    st.header("10. Confirm or recover")
+    st.info(result.visual_equivalent.action_preview)
 
     def _explain_why_review_needed(confidence_pct, barriers, fallback_reason):
         parts = []
@@ -276,6 +212,82 @@ if result:
     if ss.correcting:
         st.text_input("Edit the transcript, then apply", value=result.accessible_transcript.text, key="correction_text")
         st.button("Apply correction & re-run", on_click=_apply_correction)
+
+    # --- Everything below is pipeline detail: real, tested, and available on
+    # request -- but collapsed by default so it doesn't read like a
+    # monitoring console before anyone's asked to see it. ---------------------
+    with st.expander("🔍 Show what's happening under the hood", expanded=False):
+        st.subheader("What I heard vs. what I understood")
+        c1, c2 = st.columns(2)
+        c1.text_area("Original input", result.original_input.text, height=80)
+        c2.text_area("Accessible transcript", result.accessible_transcript.text, height=80)
+        st.caption(f"Modality: {result.original_input.modality} · Confidence: {result.original_input.confidence:.0%}")
+
+        st.subheader("Accessibility barrier & support applied")
+        bcol, scol = st.columns(2)
+        bcol.write("**Barriers detected:**")
+        for b in result.accessibility_report.barriers_detected:
+            bcol.markdown(f"- {b}")
+        scol.write("**Support applied:**")
+        for s in result.accessibility_report.support_applied:
+            scol.markdown(f"- {s}")
+        if result.language_report.code_mixed:
+            st.caption(f"Languages detected: {', '.join(result.language_report.languages_detected)}")
+
+        with st.expander("Detection evidence (raw detector output, not just the conclusion)"):
+            d = result.disfluency_report
+            st.write(f"Has disfluency: {d.has_disfluency}")
+            if d.repeated_syllables:
+                st.write(f"Repeated syllables: {', '.join(d.repeated_syllables)}")
+            if d.repeated_words:
+                st.write(f"Repeated words: {', '.join(d.repeated_words)}")
+            if d.filler_words_found:
+                st.write(f"Filler words: {', '.join(d.filler_words_found)}")
+            if d.long_pause_markers:
+                st.write(f"Long pause markers: {d.long_pause_markers}")
+            if result.language_report.romanized_markers:
+                st.write(f"Language markers: {', '.join(result.language_report.romanized_markers)}")
+
+        if result.simplified_steps.was_simplified:
+            st.subheader("Step-by-step (cognitive load reduction)")
+            for i, step in enumerate(result.simplified_steps.steps, 1):
+                st.markdown(f"{i}. {step}")
+
+        st.subheader("Detected intent")
+        st.json(
+            {
+                "goal": result.intent.goal,
+                "action_type": result.intent.action_type,
+                "entities": result.intent.entities,
+                "constraints": result.intent.constraints,
+                "urgency": result.intent.urgency,
+                "missing_information": result.intent.missing_information,
+            }
+        )
+
+        with st.expander(f"View retrieved context ({len(result.retrieved_context)} snippets)"):
+            for snippet in result.retrieved_context:
+                st.markdown(f"**{snippet.title}** ({snippet.source})")
+                st.write(snippet.content)
+
+        st.subheader("Agent reasoning trace")
+        agent = result.agent_result
+        st.caption(
+            f"{len(agent.steps)} step(s) · tools used: {', '.join(agent.skills_used) or 'none'}"
+            + (" · hit step cap" if agent.hit_max_steps else "")
+        )
+        for step in agent.steps:
+            icon = {"call_skill": "🔧", "clarify": "❓", "finish": "✅"}.get(step.action, "•")
+            with st.expander(f"{icon} Step {step.step}: {step.action}" + (f" → {step.skill}" if step.skill else "")):
+                st.markdown(f"**Thought:** {step.thought}")
+                if step.skill:
+                    st.markdown(f"**Tool:** `{step.skill}`  ·  **Params:** `{step.params}`")
+                if step.observation:
+                    st.markdown(f"**Observation:** {step.observation}")
+                if step.question:
+                    st.markdown(f"**Clarifying question:** {step.question}")
+        if agent.clarification:
+            st.info(f"Agent needs clarification: {agent.clarification}")
 
 st.divider()
 st.caption("TCS iON Voice AI -- every voice, every context, every user.")

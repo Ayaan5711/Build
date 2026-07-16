@@ -14,11 +14,14 @@
     <h1>TCS iON Voice AI</h1>
     <p class="tagline">AI for Every Voice — voice meets inclusion</p>
   </div>
-  <div class="backend-caption" id="backendCaption" aria-live="polite">loading backend info…</div>
+  <div class="topbar-right">
+    <div class="backend-caption" id="backendCaption" aria-live="polite">loading backend info…</div>
+    <button type="button" id="sidebarToggle" class="icon-toggle" aria-expanded="false" aria-controls="sidebar" title="Cost, budget &amp; latency panel">⚙</button>
+  </div>
 </header>
 
-<div class="layout">
-  <aside class="sidebar" aria-label="Cost, budget, and latency status">
+<div class="layout" id="layoutRoot">
+  <aside class="sidebar" id="sidebar" aria-label="Cost, budget, and latency status" hidden>
     <section class="panel">
       <h2>Cost &amp; budget</h2>
       <div class="cost-amount" id="costAmount">$0.0000</div>
@@ -45,52 +48,74 @@
   </aside>
 
   <main id="main">
-    <section class="panel" id="privacyNote">
-      <details>
+    <section class="convo-shell">
+      <details class="panel-nested" id="privacyNote">
         <summary>Privacy note</summary>
         <p>No raw audio or video is stored beyond what's needed to produce a transcript or gesture
-        interpretation for this session. Accessibility analysis is supportive, not a diagnosis.
+        interpretation for this turn. Accessibility analysis is supportive, not a diagnosis.
         Nothing is acted on without your confirmation.</p>
       </details>
-    </section>
 
-    <section class="panel" aria-labelledby="h1">
-      <h2 id="h1">1. Choose how to interact</h2>
-      <div class="mode-tabs" role="tablist" aria-label="Input modality">
-        <button type="button" class="mode-tab active" data-mode="mic" role="tab" aria-selected="true">🎙 Start Listening</button>
-        <button type="button" class="mode-tab" data-mode="camera" role="tab" aria-selected="false">📷 Start Camera</button>
-        <button type="button" class="mode-tab" data-mode="text" role="tab" aria-selected="false">⌨ Type instead</button>
+      <p class="convo-greeting">Hi. What would you like help with?</p>
+
+      <div class="convo-stage" id="stage-mic">
+        <button type="button" id="talkOrb" class="talk-orb" aria-label="Tap to talk">🎙</button>
+        <p class="orb-caption" id="orbCaption">Tap to talk</p>
+      </div>
+
+      <div class="convo-stage" id="stage-camera" hidden>
+        <video id="convoCameraPreview" autoplay playsinline muted></video>
+        <canvas id="convoCameraCanvas" hidden></canvas>
+        <p class="orb-caption" id="gestureCountdown">Starting camera…</p>
+        <p class="muted small">Predefined gestures: thumbs up = confirm · open palm = help · fist = correct/cancel · pointing = select · peace = switch modality.</p>
+      </div>
+
+      <div class="convo-stage" id="stage-text" hidden>
+        <div class="convo-text-row">
+          <input type="text" id="convoTextInput" placeholder="Type what you'd like help with…" value="B-b-b-book appointment tomorrow" />
+          <button type="button" id="convoTextSend" class="btn btn-primary">Send</button>
+        </div>
+      </div>
+
+      <div class="convo-alt-row" id="convoAltRow">
+        <button type="button" class="link-btn" data-switch="mic" hidden>🎙 Use voice instead</button>
+        <button type="button" class="link-btn" data-switch="camera">✋ Use a gesture instead</button>
+        <button type="button" class="link-btn" data-switch="text">⌨ Type instead</button>
+      </div>
+
+      <p class="convo-status" id="convoStatus" aria-live="polite" hidden></p>
+      <div id="fallbackBanner" class="banner banner-warning" hidden></div>
+
+      <div class="convo-result" id="convoResult" hidden aria-live="polite">
+        <p class="convo-heard" id="convoHeard"></p>
+        <div class="banner banner-info" id="clarifyingQuestion" hidden></div>
+
+        <div class="convo-response-card">
+          <p id="convoResponse"></p>
+          <p class="muted small" id="captionLine"></p>
+          <div class="banner banner-info" id="actionPreview"></div>
+          <button type="button" id="replayVoiceBtn" class="btn btn-small">🔊 Replay</button>
+        </div>
+
+        <div class="banner" id="recoveryExplainer"></div>
+        <div id="recoveryButtons" class="btn-row confirm-row"></div>
+        <p class="status-text" id="recoveryListenStatus" aria-live="polite"></p>
+        <div id="confirmedBanner" class="banner banner-success" hidden>Confirmed — the action would now proceed.</div>
+        <div id="correctPanel" hidden>
+          <label for="correctionText">Edit the transcript, then apply</label>
+          <span class="input-with-mic">
+            <input type="text" id="correctionText" />
+            <button type="button" class="mic-btn" data-target="correctionText" title="Record correction instead of typing">🎙</button>
+          </span>
+          <button type="button" id="applyCorrectionBtn" class="btn btn-primary btn-small">Apply correction &amp; re-run</button>
+        </div>
       </div>
 
       <label class="voice-toggle">
-        <input type="checkbox" id="voiceRecoveryToggle" />
-        🎙 Voice-driven confirmation — after each response, automatically listen for a spoken reply
-        ("yes", "retry", "that's wrong", "switch") instead of requiring a click. For a fully speak-and-listen
-        experience. Off by default so the mic doesn't activate unexpectedly.
+        <input type="checkbox" id="voiceRecoveryToggle" checked />
+        🎙 Listen for my spoken reply ("yes", "retry", "that's wrong", "switch") instead of requiring a tap.
+        Turn off if you'd rather always use the buttons above.
       </label>
-
-      <div class="mode-panel" id="mode-mic">
-        <p class="muted">Push-to-talk: click once to record, click again to stop.</p>
-        <button type="button" id="micRecordBtn" class="btn btn-primary">🎙 Start recording</button>
-        <span id="micStatus" class="status-text" aria-live="polite"></span>
-        <audio id="micPreview" controls hidden></audio>
-      </div>
-
-      <div class="mode-panel" id="mode-camera" hidden>
-        <p class="muted">Predefined gestures: thumbs up = confirm, open palm = help, fist = correct/cancel, pointing = select, peace = switch modality.</p>
-        <video id="cameraPreview" autoplay playsinline muted></video>
-        <canvas id="cameraCanvas" hidden></canvas>
-        <div class="btn-row">
-          <button type="button" id="cameraStartBtn" class="btn">📷 Enable camera</button>
-          <button type="button" id="cameraCaptureBtn" class="btn btn-primary" disabled>Capture gesture</button>
-        </div>
-        <img id="capturedGesturePreview" alt="Captured gesture preview" hidden />
-      </div>
-
-      <div class="mode-panel" id="mode-text" hidden>
-        <label for="textInput">Type an utterance:</label>
-        <input type="text" id="textInput" value="B-b-b-book appointment tomorrow" />
-      </div>
 
       <details class="panel-nested">
         <summary>Personalize (optional) — teach it a word/name it keeps mishearing</summary>
@@ -112,12 +137,11 @@
         <button type="button" id="saveCorrectionBtn" class="btn btn-small">Save correction</button>
       </details>
 
-      <button type="button" id="runBtn" class="btn btn-primary btn-large" disabled>Run</button>
-      <div id="fallbackBanner" class="banner banner-warning" hidden></div>
+      <button type="button" id="detailsToggle" class="link-btn" hidden>🔍 Show what's happening under the hood</button>
     </section>
 
     <section class="panel result-section" id="resultSection" hidden>
-      <h2>2-4. What was heard / understood</h2>
+      <h2>What I heard vs. what I understood</h2>
       <div class="two-col">
         <div>
           <label for="originalInputOut">Original input</label>
@@ -129,9 +153,8 @@
         </div>
       </div>
       <p class="muted" id="modalityConfidence"></p>
-      <div id="clarifyingQuestion" class="banner banner-info" hidden></div>
 
-      <h2>5-6. Accessibility barrier &amp; support applied</h2>
+      <h2>Accessibility barrier &amp; support applied</h2>
       <div class="two-col">
         <div>
           <strong>Barriers detected:</strong>
@@ -154,39 +177,18 @@
         <ol id="stepsList"></ol>
       </div>
 
-      <h2>7. Detected intent</h2>
+      <h2>Detected intent</h2>
       <pre id="intentJson" class="json-block"></pre>
 
       <details class="panel-nested">
-        <summary id="ragSummary">View Retrieved Context</summary>
+        <summary id="ragSummary">View retrieved context</summary>
         <div id="ragContext"></div>
       </details>
 
-      <h2>8b. Agent reasoning trace</h2>
+      <h2>Agent reasoning trace</h2>
       <p class="muted" id="agentCaption"></p>
       <div id="agentTrace"></div>
       <div id="agentClarification" class="banner banner-info" hidden></div>
-
-      <h2>9. Action preview &amp; confirmation</h2>
-      <div class="banner banner-info" id="actionPreview"></div>
-      <p class="muted" id="captionLine"></p>
-      <h3>Final response</h3>
-      <div class="banner banner-success" id="finalResponse"></div>
-      <button type="button" id="replayVoiceBtn" class="btn btn-small">🔊 Replay voice response</button>
-
-      <h2>10. Confirm or recover</h2>
-      <div id="recoveryExplainer" class="banner"></div>
-      <div id="recoveryButtons" class="btn-row"></div>
-      <p class="status-text" id="recoveryListenStatus" aria-live="polite"></p>
-      <div id="confirmedBanner" class="banner banner-success" hidden>Confirmed — the action would now proceed.</div>
-      <div id="correctPanel" hidden>
-        <label for="correctionText">Edit the transcript, then apply</label>
-        <span class="input-with-mic">
-          <input type="text" id="correctionText" />
-          <button type="button" class="mic-btn" data-target="correctionText" title="Record correction instead of typing">🎙</button>
-        </span>
-        <button type="button" id="applyCorrectionBtn" class="btn btn-primary btn-small">Apply correction &amp; re-run</button>
-      </div>
     </section>
   </main>
 </div>

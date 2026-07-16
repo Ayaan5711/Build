@@ -137,6 +137,23 @@ def test_gesture_mock_backend_maps_to_candidate_intent():
     assert gesture_result.candidate_intent == "confirm"
 
 
+def test_gesture_mock_backend_real_capture_gives_no_gesture_not_a_crash(tmp_path):
+    """A real captured frame (e.g. a browser camera snapshot saved to a
+    random temp path) has no matching .json fixture. This must NOT raise
+    (which used to trigger the NFR-03 cached-scenario fallback and show an
+    unrelated canned demo response regardless of the actual gesture -- the
+    same failure shape the mock ASR backend had, found via live browser
+    testing of the redesigned frontend's gesture path) -- it must honestly
+    report no gesture detected instead."""
+    fake_path = os.path.join(str(tmp_path), "some_random_capture_12345.jpg")
+    with open(fake_path, "wb") as f:
+        f.write(b"not a real jpeg, just a stand-in for a browser camera capture")
+    result = MockVisionBackend().interpret(fake_path)
+    assert result.gesture is None
+    assert result.confidence == 0.0
+    assert result.candidate_intent is None
+
+
 def test_merge_inputs_prefers_voice_but_carries_sign():
     transcript = Transcript(text="confirm", confidence=0.9)
     sign = GestureResult(gesture="thumbs_up", confidence=0.8, candidate_intent="confirm")
