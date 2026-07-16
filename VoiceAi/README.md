@@ -77,14 +77,22 @@ Every stage in `src/pipeline.py` is a direct call to the module implementing tha
 
 The team runs on a fixed ~$25 total budget. Ollama models are already installed on the lab laptop (free); only Whisper ASR and (optionally) the final response call cost money. `PROFILE` in `.env` routes every stage to the cheapest capable backend:
 
-| `PROFILE` | ASR | Cleanup / intent / reasoning / caption | Final response | Embeddings | Est. cost |
-|---|---|---|---|---|---|
-| `mock` (default) | mock | mock | mock | mock | $0 (offline, no key) |
-| `local` | local faster-whisper | Ollama (free) | Ollama (free) | Ollama `gte-large` | **$0, fully offline** |
-| `hybrid` | hosted Whisper | Ollama (free) | hosted `gpt-4o` | Ollama `gte-large` | **~cents/demo** (recommended for match day) |
-| `hosted` | hosted | hosted | hosted | hosted | highest |
+| `PROFILE` | ASR | Cleanup / intent / reasoning / caption | Final response | Embeddings | Est. cost | Speed |
+|---|---|---|---|---|---|---|
+| `mock` (default) | mock | mock | mock | mock | $0 | instant |
+| `local` | local faster-whisper | Ollama (free) | Ollama (free) | Ollama `gte-large` | **$0, offline** | **as fast as the laptop** ⚠ |
+| `hybrid` | hosted Whisper | Ollama (free) | hosted `gpt-4o` | Ollama `gte-large` | ~cents/demo | limited by local Ollama |
+| `fast` | hosted Whisper | hosted `gpt-4o-mini` | hosted `gpt-4o-mini` | hosted | ~cents/demo | **fastest (server GPUs)** |
+| `hosted` | hosted | hosted | hosted `gpt-4o` | hosted | highest | fast |
 
 The only unavoidable spend is Whisper ASR (~$0.006/min ≈ $0.50 for hundreds of demo utterances). The real budget risk is an accidental loop, which the budget cap prevents. Override any single stage with per-stage env vars (e.g. `LLM_BACKEND_RESPONSE=event` on an otherwise-local profile).
+
+### Speed matters more than cost -- measure it
+
+Cost is a solved problem (~cents); the binding constraint on a slow lab laptop is **latency**. Each turn makes 6–8 LLM calls, so slow local models can push a single turn to minutes. Two guards:
+
+- The default reasoning model is **not** a reasoning model (`gpt-4o-mini`, not DeepSeek-R1) — a chain-of-thought model is the slowest thing in the pipeline and unnecessary for barrier classification / confirm-retry decisions. Opt back into DeepSeek-R1 via `GENAILAB_REASONING_MODEL` / `OLLAMA_REASONING_MODEL` only if you've measured it's fast enough.
+- The app sidebar shows **per-stage latency for the last run**, with a red/amber/green verdict for live-demo suitability. Run once on the actual lab laptop in each profile and read the numbers — don't guess. If `local`/`hybrid` are slow, use `PROFILE=fast` (all hosted, server-GPU speed, still cents).
 
 ## Backends -- change config, not code
 

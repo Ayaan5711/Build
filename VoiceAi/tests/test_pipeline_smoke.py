@@ -32,6 +32,16 @@ def test_full_pipeline_via_text_override(tmp_path):
     assert result.recovery_options is not None
 
 
+def test_pipeline_records_per_stage_timings(tmp_path):
+    result = run_pipeline(text_override="Book a meeting", user_id=f"test-timing-{tmp_path.name}")
+    assert result.total_ms >= 0
+    assert result.timings_ms  # non-empty
+    # Every timed stage should be present and non-negative.
+    for stage, ms in result.timings_ms.items():
+        assert ms >= 0, f"{stage} had negative timing"
+    assert "final response (response LLM)" in result.timings_ms
+
+
 def test_detect_stammering_flags_repeated_syllables():
     ctx = merge_inputs(transcript=Transcript(text="Call Ka-ka-ka-Kiran", confidence=0.9))
     report = detect_stammering(ctx)

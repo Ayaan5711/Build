@@ -75,6 +75,20 @@ with st.sidebar:
         reset_cost_tracker()
         st.rerun()
 
+    # --- Latency: measure on the real laptop, don't guess -------------------
+    if ss.get("result") is not None and ss.result.timings_ms:
+        st.subheader("Latency (last run)")
+        total = ss.result.total_ms
+        st.metric("Total", f"{total/1000:.1f} s")
+        if total > 12000:
+            st.error("Slow for a live demo (>12s). Try PROFILE=fast (all hosted).")
+        elif total > 6000:
+            st.warning("A bit slow (>6s). PROFILE=fast will be snappier.")
+        else:
+            st.success("Snappy enough for a live demo.")
+        slow_first = dict(sorted(ss.result.timings_ms.items(), key=lambda kv: -kv[1]))
+        st.write({k: f"{v/1000:.2f} s" for k, v in slow_first.items()})
+
 st.title("TCS iON Voice AI -- AI for Every Voice")
 st.caption(
     f"ASR: {config.ASR_BACKEND} · Vision: {config.VISION_BACKEND} · Embed: {config.EMBED_BACKEND} · "

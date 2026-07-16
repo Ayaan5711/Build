@@ -31,9 +31,19 @@ _PROFILES = {
     },
     "hybrid": {
         # ASR + final response hosted (seen by the judge); everything else
-        # free on local Ollama.
+        # free on local Ollama. Cheapest live option -- but only fast enough
+        # if the laptop runs Ollama acceptably; MEASURE first (see timings).
         "asr": "event", "vision": "local", "embed": "ollama", "tts": "local",
         "llm": {"cleanup": "ollama", "reasoning": "ollama", "intent": "ollama", "response": "event", "caption": "ollama"},
+    },
+    "fast": {
+        # Everything hosted on server GPUs -> fastest live option, immune to
+        # a slow laptop. Uses lightweight hosted models (see GENAILAB_MODELS
+        # 'fast' defaults) and avoids the slow reasoning model. Recommended
+        # for the live demo if the lab laptop is sluggish. Still only cents
+        # per demo -- the budget cap protects you.
+        "asr": "event", "vision": "local", "embed": "event", "tts": "local",
+        "llm": {"cleanup": "event", "reasoning": "event", "intent": "event", "response": "event", "caption": "event"},
     },
     "hosted": {
         "asr": "event", "vision": "local", "embed": "event", "tts": "local",
@@ -76,15 +86,26 @@ GENAILAB_API_KEY = os.getenv("GENAILAB_API_KEY", "")
 GENAILAB_ASR_MODEL = os.getenv("GENAILAB_ASR_MODEL", "azure/genailab-maas-whisper")
 GENAILAB_EMBED_MODEL = os.getenv("GENAILAB_EMBED_MODEL", "azure/genailab-maas-text-embedding-3-large")
 
+# Final-response model depends on profile: 'fast' uses the lightweight mini
+# (server-GPU fast, cents cheap); other hosted profiles use full gpt-4o for
+# top answer quality. Override either with GENAILAB_RESPONSE_MODEL.
+_default_response_model = "azure/genailab-maas-gpt-4o-mini" if PROFILE == "fast" else "azure/genailab-maas-gpt-4o"
+
 GENAILAB_MODELS = {
     # Transcript cleanup (Speech Equalizer / normalize_transcript)
     "cleanup": os.getenv("GENAILAB_CLEANUP_MODEL", "azure/genailab-maas-gpt-4o-mini"),
-    # Accessibility barrier analysis + error-recovery reasoning
-    "reasoning": os.getenv("GENAILAB_REASONING_MODEL", "azure_ai/genailab-maas-DeepSeek-R1"),
+    # Accessibility barrier analysis + error-recovery reasoning. NOTE:
+    # default is gpt-4o-mini, NOT DeepSeek-R1 -- a reasoning model emits a
+    # long chain-of-thought and is the single slowest thing in the pipeline,
+    # which matters on a slow laptop and in a 5-minute live demo. Barrier
+    # classification and confirm/retry decisions don't need CoT. Set
+    # GENAILAB_REASONING_MODEL=azure_ai/genailab-maas-DeepSeek-R1 if you
+    # specifically want deeper reasoning and can afford the latency.
+    "reasoning": os.getenv("GENAILAB_REASONING_MODEL", "azure/genailab-maas-gpt-4o-mini"),
     # Intent/entity/constraint extraction
     "intent": os.getenv("GENAILAB_INTENT_MODEL", "azure/genailab-maas-gpt-4o-mini"),
     # Final user-facing grounded response
-    "response": os.getenv("GENAILAB_RESPONSE_MODEL", "azure/genailab-maas-gpt-4o"),
+    "response": os.getenv("GENAILAB_RESPONSE_MODEL", _default_response_model),
     # Captions / summaries / action previews (visual equivalence)
     "caption": os.getenv("GENAILAB_CAPTION_MODEL", "azure/genailab-maas-gpt-4o-mini"),
 }
@@ -97,7 +118,10 @@ GENAILAB_MODELS = {
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODELS = {
     "cleanup": os.getenv("OLLAMA_CLEANUP_MODEL", "llama-3.2-3b-it:latest"),
-    "reasoning": os.getenv("OLLAMA_REASONING_MODEL", "deepseek-r1:latest"),
+    # Default is the small llama, NOT local deepseek-r1: a reasoning model on
+    # a CPU-only laptop can take minutes per call. Opt into deepseek-r1 via
+    # OLLAMA_REASONING_MODEL only if you've measured it's fast enough.
+    "reasoning": os.getenv("OLLAMA_REASONING_MODEL", "llama-3.2-3b-it:latest"),
     "intent": os.getenv("OLLAMA_INTENT_MODEL", "llama-3.2-3b-it:latest"),
     "response": os.getenv("OLLAMA_RESPONSE_MODEL", "gemma-3-4b-it:latest"),
     "caption": os.getenv("OLLAMA_CAPTION_MODEL", "llama-3.2-3b-it:latest"),

@@ -1,5 +1,7 @@
 import json
 import os
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -43,6 +45,20 @@ class PipelineResult:
     recovery_options: RecoveryDecision
     used_fallback_cache: bool = False
     fallback_reason: str = ""
+    # Per-stage wall-clock timings in milliseconds -- so you can MEASURE
+    # latency on the actual (possibly slow) lab laptop per backend, instead
+    # of guessing whether local models are fast enough for a live demo.
+    timings_ms: dict = field(default_factory=dict)
+    total_ms: float = 0.0
+
+
+@contextmanager
+def _stage(timings: dict, name: str):
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        timings[name] = round((time.perf_counter() - start) * 1000, 1)
 
 
 def run_pipeline(
@@ -74,70 +90,87 @@ def _run_pipeline_live(
     text_override: Optional[str],
     user_id: str,
 ) -> PipelineResult:
+    timings = {}
+    pipeline_start = time.perf_counter()
+
     asr = get_asr_backend()
     vision = get_vision_backend()
     user_memory = UserMemory(user_id)
     kb = KnowledgeBase()
     ctx = {"knowledge_base": kb, "user_memory": user_memory}
 
-    if text_override is not None:
-        from src.input.microphone import Transcript
+    with _stage(timings, "asr"):
+        if text_override is not None:
+            from src.input.microphone import Transcript
 
-        transcript = Transcript(text=text_override, confidence=1.0)
-    elif audio_path:
-        transcript = asr.transcribe(audio_path)
-    else:
-        transcript = None
+            transcript = Transcript(text=text_override, confidence=1.0)
+        elif audio_path:
+            transcript = asr.transcribe(audio_path)
+        else:
+            transcript = None
 
-    sign_result = vision.interpret(image_path) if image_path else None
+    with _stage(timings, "vision"):
+        sign_result = vision.interpret(image_path) if image_path else None
     input_context = merge_inputs(transcript=transcript, sign_result=sign_result)
 
-    language_report = detect_language_mix(input_context)
-    disfluency_report = detect_stammering(input_context)
+    with _stage(timings, "language+disfluency (rule-based)"):
+        language_report = detect_language_mix(input_context)
+        disfluency_report = detect_stammering(input_context)
 
     reasoning_llm = get_llm_backend("reasoning")
-    accent_noise_report = analyze_accent_noise_confidence(input_context, llm=reasoning_llm)
+    with _stage(timings, "accent/noise"):
+        accent_noise_report = analyze_accent_noise_confidence(input_context, llm=reasoning_llm)
 
     cleanup_llm = get_llm_backend("cleanup")
     known_corrections = user_memory.get_known_corrections()
-    accessible_transcript = normalize_transcript(input_context.text, cleanup_llm, known_corrections=known_corrections)
+    with _stage(timings, "normalize (cleanup LLM)"):
+        accessible_transcript = normalize_transcript(input_context.text, cleanup_llm, known_corrections=known_corrections)
 
     caption_llm = get_llm_backend("caption")
-    visual_equivalent = generate_caption_summary_action_preview(accessible_transcript.text, caption_llm)
+    with _stage(timings, "caption LLM"):
+        visual_equivalent = generate_caption_summary_action_preview(accessible_transcript.text, caption_llm)
 
-    accessibility_report = analyze_accessibility(
-        disfluency_report, language_report, accent_noise_report, sign_result, reasoning_llm
-    )
+    with _stage(timings, "accessibility report (reasoning LLM)"):
+        accessibility_report = analyze_accessibility(
+            disfluency_report, language_report, accent_noise_report, sign_result, reasoning_llm
+        )
 
-    simplified_steps = simplify_instructions(accessible_transcript.text, cleanup_llm)
+    with _stage(timings, "simplify"):
+        simplified_steps = simplify_instructions(accessible_transcript.text, cleanup_llm)
 
     intent_llm = get_llm_backend("intent")
-    intent = extract_intent(accessible_transcript.text, sign_result, intent_llm)
+    with _stage(timings, "intent LLM"):
+        intent = extract_intent(accessible_transcript.text, sign_result, intent_llm)
 
-    retrieved_context = rag_retrieve(accessible_transcript.text, kb, k=3)
+    with _stage(timings, "RAG retrieval"):
+        retrieved_context = rag_retrieve(accessible_transcript.text, kb, k=3)
 
-    skill_result = None
-    routing = select_skill(accessible_transcript.text, cleanup_llm)
-    skill_name = routing.get("skill")
-    if skill_name:
-        skill = get_skills().get(skill_name)
-        if skill:
-            skill_result = skill.run(routing.get("params", {}), ctx)
+    with _stage(timings, "skill routing"):
+        skill_result = None
+        routing = select_skill(accessible_transcript.text, cleanup_llm)
+        skill_name = routing.get("skill")
+        if skill_name:
+            skill = get_skills().get(skill_name)
+            if skill:
+                skill_result = skill.run(routing.get("params", {}), ctx)
 
     response_llm = get_llm_backend("response")
-    final_response = generate_grounded_response(
-        accessible_transcript.text,
-        intent,
-        retrieved_context,
-        accessibility_report,
-        response_llm,
-        skill_output=skill_result.output if skill_result else None,
-    )
+    with _stage(timings, "final response (response LLM)"):
+        final_response = generate_grounded_response(
+            accessible_transcript.text,
+            intent,
+            retrieved_context,
+            accessibility_report,
+            response_llm,
+            skill_output=skill_result.output if skill_result else None,
+        )
 
-    recovery_options = decide_recovery_or_confirmation(
-        input_context.confidence, intent.missing_information, accessibility_report, reasoning_llm
-    )
+    with _stage(timings, "recovery decision (reasoning LLM)"):
+        recovery_options = decide_recovery_or_confirmation(
+            input_context.confidence, intent.missing_information, accessibility_report, reasoning_llm
+        )
 
+    total_ms = round((time.perf_counter() - pipeline_start) * 1000, 1)
     return PipelineResult(
         original_input=input_context,
         disfluency_report=disfluency_report,
@@ -152,6 +185,8 @@ def _run_pipeline_live(
         skill_result=skill_result,
         final_response=final_response,
         recovery_options=recovery_options,
+        timings_ms=timings,
+        total_ms=total_ms,
     )
 
 
