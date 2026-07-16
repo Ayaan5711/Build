@@ -7,3 +7,4 @@ captured_audio*
 captured_gesture*
 .ipynb_checkpoints/
 .cost_log.json
+.mediapipe_models/
