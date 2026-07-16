@@ -113,12 +113,28 @@ Every `event`-backend class fails fast with a clear `RuntimeError` if `GENAILAB_
 
 ## Running
 
+Setup (same for both UIs below):
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate.bat
 pip install -r requirements.txt
 cp .env.example .env    # edit backend selection / API key when available -- never commit .env
-streamlit run app.py
 ```
+
+**Two UIs, same unmodified pipeline underneath -- pick either, or run both:**
+
+```bash
+# Option A: Streamlit (original, zero extra moving parts)
+streamlit run app.py
+
+# Option B: custom HTML/CSS/JS + FastAPI (full visual control)
+uvicorn server:app --host 0.0.0.0 --port 8000
+# then open http://localhost:8000
+```
+
+The FastAPI option (`server.py` + `frontend/`) is a thin API wrapper around the exact same `src/pipeline.py` -- no pipeline logic lives in `server.py`, only request/response plumbing, so both UIs stay behaviorally identical and share every backend/cost/latency feature.
+
+**Voice in this UI:** input is real microphone audio (`MediaRecorder`) sent to our own Whisper pipeline -- deliberately *not* the browser's built-in speech recognition, which would auto-clean disfluent speech before the Speech Equalizer ever sees it and defeat the disfluency-detection story. Output is the browser's built-in `speechSynthesis` (free, zero backend dependency, works offline once the page loads) -- auto-speaks the final response or clarifying question after every run, with a "Replay voice response" button as a manual fallback if a browser blocks autoplay. Push-to-talk mic buttons (🎙) are also wired onto the Correct and Personalize fields, not just the main input.
 
 Run the smoke tests (mock backends only, no network needed):
 
@@ -151,6 +167,11 @@ Same pattern -- add entries to `src/knowledge/seed_data/accessibility_knowledge.
 
 ```
 app.py                          # Streamlit dashboard (PRD's 11-screen flow)
+server.py                       # FastAPI backend for the HTML/CSS/JS UI -- thin wrapper, no pipeline logic
+frontend/
+  index.html                      # HTML/CSS/JS dashboard (same 11-screen flow as app.py)
+  style.css                         # accessible-by-default styling (contrast, focus states)
+  app.js                              # mic/camera capture, API calls, rendering, speechSynthesis TTS
 src/
   config.py                     # backend selection + model-per-role routing
   llm.py                        # LLM backend abstraction (mock/ollama/event)
@@ -187,7 +208,7 @@ data/
   sample_gestures/                # .json gesture-label stand-ins until real photos exist
   demo_scenarios.json              # cached fallback outputs for the PRD's 10 demo samples
 notebooks/pipeline_demo.ipynb    # executable walkthrough, stage by stage
-tests/test_pipeline_smoke.py     # 18 tests, every module, mock backends only
+tests/                            # 48 tests total: pipeline, agent, cost/profiles, server API
 docs/PRD.md                      # the actual PRD, verbatim
 ```
 
@@ -198,3 +219,4 @@ docs/PRD.md                      # the actual PRD, verbatim
 - `LocalWhisperBackend`, `MediaPipeVisionBackend`, and `OllamaLLMBackend` are written correctly but unverified in the dev sandbox this was built in (no route to Hugging Face for model weights, no camera/mic hardware, no running Ollama server there) -- verify each on the actual lab laptop.
 - `st.camera_input`/`st.audio_input` capture a snapshot/recording per turn, not a continuous stream -- matches the PRD's own "predefined gesture capture" MVP scope; true continuous video would need `streamlit-webrtc`, out of scope.
 - The mock LLM's cleanup pass is a regex heuristic, not real disfluency repair -- it's there so the pipeline is testable offline, not to demo quality. Use `LLM_BACKEND=ollama` or `event` for anything you'd actually show a judge.
+- The HTML/CSS/JS frontend (`frontend/` + `server.py`) is verified via FastAPI's `TestClient` (in-process HTTP, 15 tests) and a live `uvicorn` boot with `curl` -- both prove the API contract and every route works. What's **not** verified here: actual browser behavior (`MediaRecorder`, `getUserMedia`, `speechSynthesis` autoplay policies) -- this sandbox has no browser or mic/camera hardware to click through with. Open it in a real browser on the lab laptop before trusting it live; if `speechSynthesis` gets blocked by an autoplay policy, the "Replay voice response" button is the manual fallback.

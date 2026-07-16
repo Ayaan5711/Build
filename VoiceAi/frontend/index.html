@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TCS iON Voice AI — AI for Every Voice</title>
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <h1>TCS iON Voice AI</h1>
+    <p class="tagline">AI for Every Voice — voice meets inclusion</p>
+  </div>
+  <div class="backend-caption" id="backendCaption" aria-live="polite">loading backend info…</div>
+</header>
+
+<div class="layout">
+  <aside class="sidebar" aria-label="Cost, budget, and latency status">
+    <section class="panel">
+      <h2>Cost &amp; budget</h2>
+      <div class="cost-amount" id="costAmount">$0.0000</div>
+      <div class="progress-track" role="progressbar" aria-label="Budget used" aria-valuemin="0" aria-valuemax="100" id="costProgressWrap">
+        <div class="progress-fill" id="costProgress"></div>
+      </div>
+      <p class="muted" id="costCaption">cap $0.00 · profile —</p>
+      <div id="costByStage" class="kv-list"></div>
+      <button type="button" id="resetCostBtn" class="btn btn-small">Reset cost log</button>
+      <p class="muted small">Estimates for budgeting, not exact billing.</p>
+    </section>
+
+    <section class="panel" id="latencyPanel" hidden>
+      <h2>Latency (last run)</h2>
+      <div class="cost-amount" id="latencyTotal">0.0 s</div>
+      <div class="verdict" id="latencyVerdict"></div>
+      <div id="latencyByStage" class="kv-list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Available tools (agent)</h2>
+      <ul id="skillsList" class="skills-list"></ul>
+    </section>
+  </aside>
+
+  <main id="main">
+    <section class="panel" id="privacyNote">
+      <details>
+        <summary>Privacy note</summary>
+        <p>No raw audio or video is stored beyond what's needed to produce a transcript or gesture
+        interpretation for this session. Accessibility analysis is supportive, not a diagnosis.
+        Nothing is acted on without your confirmation.</p>
+      </details>
+    </section>
+
+    <section class="panel" aria-labelledby="h1">
+      <h2 id="h1">1. Choose how to interact</h2>
+      <div class="mode-tabs" role="tablist" aria-label="Input modality">
+        <button type="button" class="mode-tab active" data-mode="mic" role="tab" aria-selected="true">🎙 Start Listening</button>
+        <button type="button" class="mode-tab" data-mode="camera" role="tab" aria-selected="false">📷 Start Camera</button>
+        <button type="button" class="mode-tab" data-mode="text" role="tab" aria-selected="false">⌨ Type instead</button>
+      </div>
+
+      <div class="mode-panel" id="mode-mic">
+        <p class="muted">Push-to-talk: click once to record, click again to stop.</p>
+        <button type="button" id="micRecordBtn" class="btn btn-primary">🎙 Start recording</button>
+        <span id="micStatus" class="status-text" aria-live="polite"></span>
+        <audio id="micPreview" controls hidden></audio>
+      </div>
+
+      <div class="mode-panel" id="mode-camera" hidden>
+        <p class="muted">Predefined gestures: thumbs up = confirm, open palm = help, fist = correct/cancel, pointing = select, peace = switch modality.</p>
+        <video id="cameraPreview" autoplay playsinline muted></video>
+        <canvas id="cameraCanvas" hidden></canvas>
+        <div class="btn-row">
+          <button type="button" id="cameraStartBtn" class="btn">📷 Enable camera</button>
+          <button type="button" id="cameraCaptureBtn" class="btn btn-primary" disabled>Capture gesture</button>
+        </div>
+        <img id="capturedGesturePreview" alt="Captured gesture preview" hidden />
+      </div>
+
+      <div class="mode-panel" id="mode-text" hidden>
+        <label for="textInput">Type an utterance:</label>
+        <input type="text" id="textInput" value="B-b-b-book appointment tomorrow" />
+      </div>
+
+      <details class="panel-nested">
+        <summary>Personalize (optional) — teach it a word/name it keeps mishearing</summary>
+        <div id="knownCorrections" class="muted"></div>
+        <div class="field-row">
+          <label>Mishears it as
+            <span class="input-with-mic">
+              <input type="text" id="wrongWordInput" />
+              <button type="button" class="mic-btn" data-target="wrongWordInput" title="Record instead of typing">🎙</button>
+            </span>
+          </label>
+          <label>Correct version
+            <span class="input-with-mic">
+              <input type="text" id="rightWordInput" />
+              <button type="button" class="mic-btn" data-target="rightWordInput" title="Record instead of typing">🎙</button>
+            </span>
+          </label>
+        </div>
+        <button type="button" id="saveCorrectionBtn" class="btn btn-small">Save correction</button>
+      </details>
+
+      <button type="button" id="runBtn" class="btn btn-primary btn-large" disabled>Run</button>
+      <div id="fallbackBanner" class="banner banner-warning" hidden></div>
+    </section>
+
+    <section class="panel result-section" id="resultSection" hidden>
+      <h2>2-4. What was heard / understood</h2>
+      <div class="two-col">
+        <div>
+          <label for="originalInputOut">Original input</label>
+          <textarea id="originalInputOut" readonly></textarea>
+        </div>
+        <div>
+          <label for="accessibleTranscriptOut">Accessible transcript</label>
+          <textarea id="accessibleTranscriptOut" readonly></textarea>
+        </div>
+      </div>
+      <p class="muted" id="modalityConfidence"></p>
+      <div id="clarifyingQuestion" class="banner banner-info" hidden></div>
+
+      <h2>5-6. Accessibility barrier &amp; support applied</h2>
+      <div class="two-col">
+        <div>
+          <strong>Barriers detected:</strong>
+          <ul id="barriersList"></ul>
+        </div>
+        <div>
+          <strong>Support applied:</strong>
+          <ul id="supportList"></ul>
+        </div>
+      </div>
+      <p class="muted" id="languagesLine" hidden></p>
+
+      <div id="stepsSection" hidden>
+        <h3>Step-by-step (cognitive load reduction)</h3>
+        <ol id="stepsList"></ol>
+      </div>
+
+      <h2>7. Detected intent</h2>
+      <pre id="intentJson" class="json-block"></pre>
+
+      <details class="panel-nested">
+        <summary id="ragSummary">View Retrieved Context</summary>
+        <div id="ragContext"></div>
+      </details>
+
+      <h2>8b. Agent reasoning trace</h2>
+      <p class="muted" id="agentCaption"></p>
+      <div id="agentTrace"></div>
+      <div id="agentClarification" class="banner banner-info" hidden></div>
+
+      <h2>9. Action preview &amp; confirmation</h2>
+      <div class="banner banner-info" id="actionPreview"></div>
+      <p class="muted" id="captionLine"></p>
+      <h3>Final response</h3>
+      <div class="banner banner-success" id="finalResponse"></div>
+      <button type="button" id="replayVoiceBtn" class="btn btn-small">🔊 Replay voice response</button>
+
+      <h2>10. Confirm or recover</h2>
+      <div id="recoveryButtons" class="btn-row"></div>
+      <p class="muted" id="recoveryReason"></p>
+      <div id="confirmedBanner" class="banner banner-success" hidden>Confirmed — the action would now proceed.</div>
+      <div id="correctPanel" hidden>
+        <label for="correctionText">Edit the transcript, then apply</label>
+        <span class="input-with-mic">
+          <input type="text" id="correctionText" />
+          <button type="button" class="mic-btn" data-target="correctionText" title="Record correction instead of typing">🎙</button>
+        </span>
+        <button type="button" id="applyCorrectionBtn" class="btn btn-primary btn-small">Apply correction &amp; re-run</button>
+      </div>
+    </section>
+  </main>
+</div>
+
+<footer>
+  <p>TCS iON Voice AI — every voice, every context, every user.</p>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
