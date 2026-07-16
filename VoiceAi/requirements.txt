@@ -1,0 +1,10 @@
+streamlit
+chromadb
+langchain-openai
+httpx
+requests
+faster-whisper
+mediapipe
+opencv-python-headless
+numpy
+python-dotenv

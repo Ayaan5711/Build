@@ -1,0 +1,68 @@
+[
+  {
+    "id": "pas901-understand",
+    "source": "PAS 901:2025",
+    "title": "Principle 1 - Understand",
+    "content": "Do not assume perfect speech. Real-world users may have speech impairments, strong accents, age-related speech changes, or temporary speech challenges. Every voice counts; voice systems should recognize diverse voices and treat speech differences as normal variation, not error."
+  },
+  {
+    "id": "pas901-simplify",
+    "source": "PAS 901:2025",
+    "title": "Principle 2 - Simplify",
+    "content": "Favor natural conversation over rigid command menus. Instead of forcing users to memorize commands like 'press 3 and say ACCOUNT_BALANCE_REQUEST', ask 'what would you like to do today?'. Prioritize intent over syntax and cognitive ease."
+  },
+  {
+    "id": "pas901-adapt",
+    "source": "PAS 901:2025",
+    "title": "Principle 3 - Adapt",
+    "content": "Always provide alternatives. Interaction modes should include voice, text, and touch. If one modality fails, another remains available: voice to text fallback, text to voice output, touch controls. Never rely on a single channel."
+  },
+  {
+    "id": "pas901-assure",
+    "source": "PAS 901:2025",
+    "title": "Principle 4 - Assure",
+    "content": "Provide clear feedback and recovery. Users should always know what happened, what went wrong, and how to continue. Give clear confirmations, error recovery paths, and helpful next-step guidance rather than failing silently."
+  },
+  {
+    "id": "pas901-trust",
+    "source": "PAS 901:2025",
+    "title": "Principle 5 - Trust",
+    "content": "Build trust through transparency and privacy. Privacy should be integrated by design, systems secure by default, and users should always know what data is collected, why, and how it's used."
+  },
+  {
+    "id": "faq-speech-impairment",
+    "source": "Accessibility FAQ",
+    "title": "How does the system handle stuttering or disfluent speech?",
+    "content": "The system detects repeated syllables, repeated words, filler words, and long pauses, then produces an accessible transcript that removes the disfluency while preserving the original meaning exactly. The user always sees both the original and cleaned transcript before anything is confirmed."
+  },
+  {
+    "id": "faq-accent",
+    "source": "Accessibility FAQ",
+    "title": "What happens if the system isn't confident it understood an accented word?",
+    "content": "When ASR confidence is low, the system surfaces a plain-language clarifying question (e.g. 'Did you mean floor 11?') instead of silently guessing or failing. The user confirms, corrects, or retries before any action is taken."
+  },
+  {
+    "id": "faq-mixed-language",
+    "source": "Accessibility FAQ",
+    "title": "Does the system support Hindi/Bengali-English mixed speech?",
+    "content": "Yes. The system detects code-mixed language (e.g. 'Kal meeting ache at 5 PM') and extracts the user's intent rather than performing a literal word-for-word translation, so meaning is preserved even across mixed languages."
+  },
+  {
+    "id": "faq-sign-gesture",
+    "source": "Accessibility FAQ",
+    "title": "Can I interact without speaking?",
+    "content": "Yes. Users can switch to camera-based gesture interaction for a small set of predefined gestures (thumbs up to confirm, open palm to request help, fist to correct or cancel, pointing to select, peace sign to switch modality). This is a prototype-level gesture vocabulary, not full sign language recognition."
+  },
+  {
+    "id": "faq-privacy",
+    "source": "Accessibility FAQ",
+    "title": "Is my audio or video stored?",
+    "content": "No raw audio or video is stored beyond the immediate processing needed to produce a transcript or gesture interpretation. Accessibility analysis is treated as supportive assistance, never as a diagnosis, and the user always confirms before any action is taken."
+  },
+  {
+    "id": "faq-cognitive-load",
+    "source": "Accessibility FAQ",
+    "title": "How does the system help with long, complex instructions?",
+    "content": "Complex multi-step instructions (like IVR-style menus) are broken into short, plain-language steps and confirmed one at a time, instead of presenting everything at once, to reduce memory and cognitive load."
+  }
+]

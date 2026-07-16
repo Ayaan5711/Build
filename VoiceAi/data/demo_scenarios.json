@@ -1,0 +1,206 @@
+[
+  {
+    "id": "demo-1-stammering-book",
+    "match_keywords": ["b-b-b-book", "book appointment"],
+    "cached_output": {
+      "original_text": "B-b-b-book appointment tomorrow",
+      "confidence": 0.55,
+      "disfluency": {"has_disfluency": true},
+      "languages_detected": ["en"],
+      "accessible_text": "Book appointment tomorrow",
+      "action_preview": "About to book an appointment for tomorrow",
+      "barriers_detected": ["speech_impairment"],
+      "support_applied": ["disfluency cleanup", "confirmation before action"],
+      "intent_goal": "book_appointment",
+      "intent_action_type": "schedule",
+      "final_response": "I understood: book an appointment for tomorrow. Shall I confirm this?",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "correct", "retry"],
+      "recovery_reason": "speech impairment detected, confirming before action"
+    }
+  },
+  {
+    "id": "demo-2-stammering-call",
+    "match_keywords": ["ka-ka-ka-kiran", "call kiran"],
+    "cached_output": {
+      "original_text": "Call Ka-ka-ka-Kiran",
+      "confidence": 0.55,
+      "disfluency": {"has_disfluency": true},
+      "languages_detected": ["en"],
+      "accessible_text": "Call Kiran",
+      "action_preview": "About to call Kiran",
+      "barriers_detected": ["speech_impairment"],
+      "support_applied": ["repeated syllable cleanup", "confirmation before action"],
+      "intent_goal": "call_contact",
+      "intent_action_type": "call",
+      "final_response": "I understood: call Kiran. Shall I confirm this?",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "correct", "retry"],
+      "recovery_reason": "speech impairment detected, confirming before action"
+    }
+  },
+  {
+    "id": "demo-3-accent-eleven",
+    "match_keywords": ["eleven", "floor 11"],
+    "cached_output": {
+      "original_text": "eleven",
+      "confidence": 0.4,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "eleven",
+      "action_preview": "Uncertain which floor was meant",
+      "barriers_detected": ["noise_or_accent_uncertainty"],
+      "support_applied": ["clarifying question instead of silent guess"],
+      "intent_goal": "select_floor",
+      "intent_action_type": "navigate",
+      "final_response": "Did you mean floor 11?",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "correct", "retry"],
+      "recovery_reason": "low confidence, likely accent-related ambiguity",
+      "clarifying_question": "Did you mean floor 11?"
+    }
+  },
+  {
+    "id": "demo-4-mixed-language",
+    "match_keywords": ["kal meeting ache", "mera appointment"],
+    "cached_output": {
+      "original_text": "Kal meeting ache at 5 PM",
+      "confidence": 0.72,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en", "bn"],
+      "accessible_text": "There is a meeting tomorrow at 5 PM",
+      "action_preview": "About to note a meeting tomorrow at 5 PM",
+      "barriers_detected": ["multilingual_code_mixing"],
+      "support_applied": ["code-mixed intent extraction, not literal translation"],
+      "intent_goal": "note_meeting",
+      "intent_action_type": "schedule",
+      "final_response": "Got it: you have a meeting tomorrow at 5 PM.",
+      "needs_confirmation": false,
+      "recovery_options": ["confirm"],
+      "recovery_reason": "confidence acceptable"
+    }
+  },
+  {
+    "id": "demo-5-noisy-environment",
+    "match_keywords": ["train noise", "background chatter", "noisy"],
+    "cached_output": {
+      "original_text": "book a [inaudible] to the airport",
+      "confidence": 0.35,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "book a [uncertain word] to the airport",
+      "action_preview": "Uncertain what to book to the airport",
+      "barriers_detected": ["noise_or_accent_uncertainty"],
+      "support_applied": ["low-confidence words highlighted", "retry requested"],
+      "intent_goal": "book_transport",
+      "intent_action_type": "book",
+      "final_response": "I caught part of that -- background noise made a word unclear. Could you retry, or type it instead?",
+      "needs_confirmation": true,
+      "recovery_options": ["retry", "switch_modality", "correct"],
+      "recovery_reason": "confidence too low to act safely"
+    }
+  },
+  {
+    "id": "demo-6-payment-confirmation",
+    "match_keywords": ["payment", "confirm payment", "sensitive confirmation"],
+    "cached_output": {
+      "original_text": "confirm payment of 500 rupees",
+      "confidence": 0.8,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "Confirm payment of 500 rupees",
+      "action_preview": "About to confirm a payment of 500 rupees -- visual confirmation required",
+      "barriers_detected": ["none_detected"],
+      "support_applied": ["visual action preview instead of voice-only confirmation"],
+      "intent_goal": "confirm_payment",
+      "intent_action_type": "payment",
+      "final_response": "Please review the payment preview on screen and confirm visually before it proceeds.",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "correct", "switch_modality"],
+      "recovery_reason": "sensitive action always requires explicit visual confirmation, not voice-only"
+    }
+  },
+  {
+    "id": "demo-7-ivr-simplify",
+    "match_keywords": ["press one", "press 1", "ivr"],
+    "cached_output": {
+      "original_text": "press one then go to three then enter your account number then confirm",
+      "confidence": 0.85,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "Press one, then go to three, then enter your account number, then confirm",
+      "action_preview": "A 4-step process is about to begin, shown one step at a time",
+      "barriers_detected": ["none_detected"],
+      "support_applied": ["step-by-step simplification to reduce cognitive load"],
+      "steps": ["Press one", "Go to three", "Enter your account number", "Confirm"],
+      "intent_goal": "navigate_ivr",
+      "intent_action_type": "multi_step",
+      "final_response": "This has 4 steps. Let's do them one at a time -- first, press one.",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "retry"],
+      "recovery_reason": "complex instruction broken into confirmable steps"
+    }
+  },
+  {
+    "id": "demo-8-sign-gesture",
+    "match_keywords": ["thumbs up", "gesture", "sign"],
+    "cached_output": {
+      "original_text": "thumbs_up",
+      "confidence": 0.75,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "confirm",
+      "action_preview": "Gesture interpreted as: confirm",
+      "barriers_detected": ["sign_or_gesture_interaction"],
+      "support_applied": ["predefined gesture mapped to candidate intent", "visual confirmation requested"],
+      "intent_goal": "confirm_action",
+      "intent_action_type": "confirm",
+      "final_response": "I saw a thumbs up, interpreted as confirm. Is that right?",
+      "needs_confirmation": true,
+      "recovery_options": ["confirm", "correct", "switch_modality"],
+      "recovery_reason": "gesture-based intent always confirmed visually before acting"
+    }
+  },
+  {
+    "id": "demo-9-modality-switch",
+    "match_keywords": ["can't speak", "privacy", "switch to text"],
+    "cached_output": {
+      "original_text": "[user switched to text input]",
+      "confidence": 1.0,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "User switched from voice to text input",
+      "action_preview": "Continuing the interaction via text",
+      "barriers_detected": ["situational_impairment"],
+      "support_applied": ["multimodal fallback: voice to text switch"],
+      "intent_goal": "continue_interaction",
+      "intent_action_type": "modality_switch",
+      "final_response": "No problem -- continuing in text mode.",
+      "needs_confirmation": false,
+      "recovery_options": ["confirm"],
+      "recovery_reason": "modality switch handled, no ambiguity"
+    }
+  },
+  {
+    "id": "demo-10-domain-rag",
+    "match_keywords": ["pas 901", "accessibility guidance", "what is pas"],
+    "cached_output": {
+      "original_text": "What is PAS 901?",
+      "confidence": 0.9,
+      "disfluency": {"has_disfluency": false},
+      "languages_detected": ["en"],
+      "accessible_text": "What is PAS 901?",
+      "action_preview": "Answering from the accessibility knowledge base",
+      "barriers_detected": ["none_detected"],
+      "support_applied": ["RAG-grounded answer from curated knowledge base"],
+      "intent_goal": "get_information",
+      "intent_action_type": "faq",
+      "retrieved_title": "Principle 5 - Trust",
+      "retrieved_content": "PAS 901:2025 is the Vocal Accessibility in System Design Code of Practice, built around five principles: Understand, Simplify, Adapt, Assure, and Trust.",
+      "final_response": "PAS 901:2025 is the Vocal Accessibility Code of Practice -- it defines five principles: Understand, Simplify, Adapt, Assure, and Trust.",
+      "needs_confirmation": false,
+      "recovery_options": ["confirm"],
+      "recovery_reason": "high confidence, grounded in retrieved knowledge"
+    }
+  }
+]
