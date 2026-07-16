@@ -283,6 +283,8 @@ function renderResult(r) {
     langLine.hidden = true;
   }
 
+  renderDetectionEvidence(r.disfluency_report, r.language_report);
+
   const stepsSection = $("stepsSection");
   if (r.simplified_steps.was_simplified) {
     fillOrderedList("stepsList", r.simplified_steps.steps);
@@ -355,6 +357,21 @@ function fillOrderedList(id, items) {
     li.textContent = i;
     el.appendChild(li);
   });
+}
+
+// Raw detector output -- the actual evidence behind the "speech_impairment" /
+// "multilingual_code_mixing" barrier labels shown above, not just the
+// synthesized conclusion. Matters for demo credibility: shows the detector
+// really found something specific, not a vague category.
+function renderDetectionEvidence(disfluency, language) {
+  const rows = [];
+  rows.push(`Has disfluency: ${disfluency.has_disfluency}`);
+  if (disfluency.repeated_syllables.length) rows.push(`Repeated syllables: ${disfluency.repeated_syllables.join(", ")}`);
+  if (disfluency.repeated_words.length) rows.push(`Repeated words: ${disfluency.repeated_words.join(", ")}`);
+  if (disfluency.filler_words_found.length) rows.push(`Filler words: ${disfluency.filler_words_found.join(", ")}`);
+  if (disfluency.long_pause_markers) rows.push(`Long pause markers: ${disfluency.long_pause_markers}`);
+  if (language.romanized_markers.length) rows.push(`Language markers: ${language.romanized_markers.join(", ")}`);
+  $("detectionEvidence").innerHTML = rows.map((r) => `<div>${r}</div>`).join("");
 }
 
 function renderAgentTrace(agent) {

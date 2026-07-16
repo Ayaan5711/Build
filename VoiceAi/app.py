@@ -172,6 +172,20 @@ if result:
     if result.language_report.code_mixed:
         st.caption(f"Languages detected: {', '.join(result.language_report.languages_detected)}")
 
+    with st.expander("Detection evidence (raw detector output, not just the conclusion)"):
+        d = result.disfluency_report
+        st.write(f"Has disfluency: {d.has_disfluency}")
+        if d.repeated_syllables:
+            st.write(f"Repeated syllables: {', '.join(d.repeated_syllables)}")
+        if d.repeated_words:
+            st.write(f"Repeated words: {', '.join(d.repeated_words)}")
+        if d.filler_words_found:
+            st.write(f"Filler words: {', '.join(d.filler_words_found)}")
+        if d.long_pause_markers:
+            st.write(f"Long pause markers: {d.long_pause_markers}")
+        if result.language_report.romanized_markers:
+            st.write(f"Language markers: {', '.join(result.language_report.romanized_markers)}")
+
     if result.simplified_steps.was_simplified:
         st.subheader("Step-by-step (cognitive load reduction)")
         for i, step in enumerate(result.simplified_steps.steps, 1):
