@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from src import config
+from src.agent.agent import AgentResult, AgentStep, run_agent
 from src.analysis.accent_noise import AccentNoiseReport, analyze_accent_noise_confidence
 from src.analysis.accessibility_report import AccessibilityReport, analyze_accessibility
 from src.analysis.disfluency import DisfluencyReport, detect_stammering
@@ -14,12 +15,10 @@ from src.input.merge import InputContext, merge_inputs
 from src.input.microphone import get_asr_backend
 from src.input.vision import get_vision_backend
 from src.knowledge.personalization import UserMemory
-from src.knowledge.rag import KnowledgeBase, RetrievedSnippet, rag_retrieve
+from src.knowledge.rag import KnowledgeBase, RetrievedSnippet, rag_retrieve, seed_default_knowledge_base
 from src.llm import get_llm_backend
 from src.response.generate import GroundedResponse, generate_grounded_response
 from src.response.recovery import RecoveryDecision, decide_recovery_or_confirmation
-from src.skills import get_skills, select_skill
-from src.skills.base import SkillResult
 from src.transcript.normalize import AccessibleTranscript, normalize_transcript
 from src.transcript.visual_equivalent import VisualEquivalent, generate_caption_summary_action_preview
 from src.understanding.intent import Intent, extract_intent
@@ -40,7 +39,7 @@ class PipelineResult:
     simplified_steps: SimplifiedSteps
     intent: Intent
     retrieved_context: list
-    skill_result: Optional[SkillResult]
+    agent_result: AgentResult
     final_response: GroundedResponse
     recovery_options: RecoveryDecision
     used_fallback_cache: bool = False
@@ -97,6 +96,11 @@ def _run_pipeline_live(
     vision = get_vision_backend()
     user_memory = UserMemory(user_id)
     kb = KnowledgeBase()
+    # Self-seed the RAG knowledge base so retrieval works when the pipeline
+    # runs outside the app (notebook, tests, direct calls), not only after
+    # the UI happened to seed it.
+    if kb.collection.count() == 0:
+        seed_default_knowledge_base(kb)
     ctx = {"knowledge_base": kb, "user_memory": user_memory}
 
     with _stage(timings, "asr"):
@@ -145,14 +149,15 @@ def _run_pipeline_live(
     with _stage(timings, "RAG retrieval"):
         retrieved_context = rag_retrieve(accessible_transcript.text, kb, k=3)
 
-    with _stage(timings, "skill routing"):
-        skill_result = None
-        routing = select_skill(accessible_transcript.text, cleanup_llm)
-        skill_name = routing.get("skill")
-        if skill_name:
-            skill = get_skills().get(skill_name)
-            if skill:
-                skill_result = skill.run(routing.get("params", {}), ctx)
+    with _stage(timings, "agent loop (plan->tool->observe)"):
+        agent_result = run_agent(
+            accessible_transcript.text,
+            intent,
+            retrieved_context,
+            ctx,
+            get_llm_backend("intent"),
+            max_steps=config.AGENT_MAX_STEPS,
+        )
 
     response_llm = get_llm_backend("response")
     with _stage(timings, "final response (response LLM)"):
@@ -162,13 +167,20 @@ def _run_pipeline_live(
             retrieved_context,
             accessibility_report,
             response_llm,
-            skill_output=skill_result.output if skill_result else None,
+            skill_output=agent_result.combined_output or None,
         )
 
     with _stage(timings, "recovery decision (reasoning LLM)"):
         recovery_options = decide_recovery_or_confirmation(
             input_context.confidence, intent.missing_information, accessibility_report, reasoning_llm
         )
+        # If the agent itself decided it needs to ask the user something,
+        # that forces confirmation regardless of the confidence heuristic.
+        if agent_result.clarification:
+            recovery_options.needs_confirmation = True
+            if "correct" not in recovery_options.options:
+                recovery_options.options = list(recovery_options.options) + ["correct"]
+            recovery_options.reason = f"agent needs clarification: {agent_result.clarification}"
 
     total_ms = round((time.perf_counter() - pipeline_start) * 1000, 1)
     return PipelineResult(
@@ -182,7 +194,7 @@ def _run_pipeline_live(
         simplified_steps=simplified_steps,
         intent=intent,
         retrieved_context=retrieved_context,
-        skill_result=skill_result,
+        agent_result=agent_result,
         final_response=final_response,
         recovery_options=recovery_options,
         timings_ms=timings,
@@ -243,7 +255,18 @@ def _scenario_to_result(scenario: dict) -> PipelineResult:
         retrieved_context=[RetrievedSnippet(source="cached", title=out.get("retrieved_title", ""), content=out.get("retrieved_content", ""))]
         if out.get("retrieved_content")
         else [],
-        skill_result=None,
+        agent_result=AgentResult(
+            answer=out["final_response"],
+            skill_outputs=[out["final_response"]],
+            steps=[
+                AgentStep(
+                    step=1,
+                    thought="cached scenario (offline fallback) -- no live agent run",
+                    action="finish",
+                    observation=out["final_response"],
+                )
+            ],
+        ),
         final_response=GroundedResponse(text=out["final_response"], used_context=[]),
         recovery_options=RecoveryDecision(
             needs_confirmation=out["needs_confirmation"], options=out["recovery_options"], reason=out["recovery_reason"]

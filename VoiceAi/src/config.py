@@ -134,6 +134,11 @@ WHISPER_LOCAL_MODEL = os.getenv("WHISPER_LOCAL_MODEL", "base")
 # before an action is treated as final (FR-06, FR-16).
 CONFIDENCE_THRESHOLD = float(os.getenv("CONFIDENCE_THRESHOLD", "0.6"))
 
+# Max iterations of the agent loop per turn. Each step is one LLM call, so
+# this directly bounds latency and cost -- keep it small (2-4) for a live
+# demo, especially on slow hardware.
+AGENT_MAX_STEPS = int(os.getenv("AGENT_MAX_STEPS", "3"))
+
 CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", ".chroma")
 
 # --- Resilience (NFR-03) ---------------------------------------------------

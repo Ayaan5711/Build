@@ -194,8 +194,25 @@ if result:
             st.markdown(f"**{snippet.title}** ({snippet.source})")
             st.write(snippet.content)
 
-    if result.skill_result:
-        st.caption(f"Domain skill invoked: {result.skill_result.output}")
+    # --- Agent reasoning trace (the agentic flow, made visible) -------------
+    st.header("8b. Agent reasoning trace")
+    agent = result.agent_result
+    st.caption(
+        f"{len(agent.steps)} step(s) · tools used: {', '.join(agent.skills_used) or 'none'}"
+        + (" · hit step cap" if agent.hit_max_steps else "")
+    )
+    for step in agent.steps:
+        icon = {"call_skill": "🔧", "clarify": "❓", "finish": "✅"}.get(step.action, "•")
+        with st.expander(f"{icon} Step {step.step}: {step.action}" + (f" → {step.skill}" if step.skill else "")):
+            st.markdown(f"**Thought:** {step.thought}")
+            if step.skill:
+                st.markdown(f"**Tool:** `{step.skill}`  ·  **Params:** `{step.params}`")
+            if step.observation:
+                st.markdown(f"**Observation:** {step.observation}")
+            if step.question:
+                st.markdown(f"**Clarifying question:** {step.question}")
+    if agent.clarification:
+        st.info(f"Agent needs clarification: {agent.clarification}")
 
     st.header("9. Action preview & confirmation")
     st.info(result.visual_equivalent.action_preview)

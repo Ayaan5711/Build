@@ -144,6 +144,60 @@ class MockLLMBackend(LLMBackend):
             return json.dumps({"skill": "general_help", "params": {"message": text}, "clarify": None})
         return json.dumps({"skill": None, "params": {}, "clarify": "Could you tell me more about what you'd like to do?"})
 
+    # -- agent_step (one step of the multi-step agent loop) --------------------------
+    @staticmethod
+    def _agent_step(user: str, context: dict = None) -> str:
+        """
+        Deterministic stand-in for the agent's planner so the loop is
+        testable offline. Behaviour: step 1 routes to a matching tool (or
+        finishes directly if none matches); step 2 (after an observation)
+        finalizes using that observation. Produces a genuine multi-step
+        trace, just without real reasoning.
+        """
+        payload = json.loads(user)
+        text = payload.get("user_request", "")
+        lower = text.lower()
+        tools = payload.get("available_tools", [])
+        observations = payload.get("observations_so_far", [])
+
+        if observations:
+            last = observations[-1].get("observation", "")
+            return json.dumps(
+                {
+                    "thought": "I have the tool result; finalizing.",
+                    "action": "finish",
+                    "skill": None,
+                    "params": {},
+                    "question": None,
+                    "answer": f"Based on that: {last}",
+                }
+            )
+
+        for tool in tools:
+            if tool["name"] == "general_help":
+                continue
+            if any(kw in lower for kw in tool.get("keywords", [])):
+                return json.dumps(
+                    {
+                        "thought": f"'{text}' matches the {tool['name']} tool; calling it.",
+                        "action": "call_skill",
+                        "skill": tool["name"],
+                        "params": {"query": text, "message": text},
+                        "question": None,
+                        "answer": None,
+                    }
+                )
+        return json.dumps(
+            {
+                "thought": "No specific tool matches; responding directly.",
+                "action": "finish",
+                "skill": None,
+                "params": {},
+                "question": None,
+                "answer": f'I heard: "{text}". I don\'t have a specific action for that yet, but I\'m listening.',
+            }
+        )
+
 
 class OllamaLLMBackend(LLMBackend):
     """Local-dev / lab-laptop backend using Ollama, model chosen per role

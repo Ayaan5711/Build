@@ -39,7 +39,8 @@ detect_language_mix   analyze_accent_noise    detect_stammering
                               ▼
                         rag_retrieve()  ◄── KnowledgeBase (PAS 901 + FAQs)
                               │
-                     select_skill()  (domain-aware assistance, FR-20)
+                     run_agent()  ── multi-step loop ──┐
+                       plan → call skill → observe ─────┘ (domain tools, FR-20)
                               │
                               ▼
                   generate_grounded_response()
@@ -68,7 +69,7 @@ Every stage in `src/pipeline.py` is a direct call to the module implementing tha
 - **Multimodal fallback** (FR-15) -- voice / camera-sign / text, switchable per turn.
 - **Clear feedback and recovery** (FR-16) -- confirm / correct / retry / switch_modality buttons that actually re-run the pipeline (Correct re-runs on your edited text and remembers the fix; Retry re-runs; Switch Modality cycles the input mode); never fails silently.
 - **Privacy note in the UI, no raw audio/video persisted** (FR-18, NFR-06).
-- **Domain-aware assistance** (FR-20) -- pluggable Skills (`faq_lookup`, `schedule_reminder`, `general_help`) feed into the grounded response rather than being the final answer themselves.
+- **Agentic flow** (FR-20) -- a real multi-step agent loop (`src/agent/agent.py`): the LLM plans, calls pluggable Skills as *tools*, observes each result, and decides to call another tool, ask a clarifying question, or finish. Not one-shot routing. The full reasoning trace (thought → action → observation per step) is shown in the dashboard and captured in `agent_result`. A step cap (`AGENT_MAX_STEPS`, default 3) and a "never call the same tool twice" loop guard bound latency/cost. Skills (`faq_lookup`, `schedule_reminder`, `general_help`) are the tools; adding a new one is still one new file.
 - **Cached fallback scenarios** (NFR-03) -- if every live backend call fails, the pipeline falls back to a precomputed output from `data/demo_scenarios.json` (the PRD's own 10 demo samples) instead of crashing the demo.
 - **Cost tracking + budget cap** -- every hosted call's estimated USD is tracked and shown live in the sidebar; hosted calls are refused once estimated spend crosses `BUDGET_USD_CAP` (then falls back to cached scenarios), so a runaway loop can never drain the ~$25 event budget.
 - **Personalization** -- confirmed corrections are remembered per user and auto-applied on future turns (not a PRD requirement, but compatible with FR-04 and low-cost to keep).
@@ -177,7 +178,9 @@ src/
   response/
     generate.py                                        # generate_grounded_response()
     recovery.py                                          # decide_recovery_or_confirmation()
-  skills/                                                 # domain-aware assistance (FR-20)
+  agent/
+    agent.py                                              # multi-step agent loop (run_agent) + trace
+  skills/                                                 # the agent's tools (FR-20)
     base.py, faq_lookup.py, schedule_reminder.py, general_help.py, __init__.py
 data/
   sample_audio/                  # .txt transcript stand-ins until real clips exist
