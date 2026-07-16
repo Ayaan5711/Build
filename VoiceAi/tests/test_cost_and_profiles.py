@@ -127,3 +127,58 @@ def test_per_role_env_override_wins_over_profile(monkeypatch):
     monkeypatch.delenv("LLM_BACKEND_RESPONSE", raising=False)
     monkeypatch.setenv("PROFILE", "mock")
     importlib.reload(config)  # restore
+
+
+# ------------------------------------------------------------------------
+# Real bug reproduction: python-dotenv does NOT strip a trailing "# comment"
+# on a line whose value is blank (e.g. "KEY=   # mock | local" parses as
+# KEY="# mock | local", the entire comment, not KEY=""). .env.example used
+# to have exactly that pattern on "leave blank to use the profile" lines --
+# left un-edited, this silently set backends to a garbage string that is
+# truthy, which (for the global LLM_BACKEND) would silently override every
+# role's profile-based routing. Found via live testing on a real machine.
+# ------------------------------------------------------------------------
+def test_garbled_comment_value_is_ignored_not_used_literally(monkeypatch):
+    import importlib
+
+    # Exactly what a leftover, un-edited .env.example line produces.
+    monkeypatch.setenv("VISION_BACKEND", "# mock | local (MediaPipe Hands)")
+    monkeypatch.setenv("PROFILE", "mock")
+    from src import config
+
+    importlib.reload(config)
+    assert config.VISION_BACKEND == "mock"  # falls back to profile default, not the garbage string
+    monkeypatch.delenv("VISION_BACKEND", raising=False)
+    importlib.reload(config)  # restore
+
+
+def test_garbled_global_llm_backend_does_not_veto_profile_routing(monkeypatch):
+    """This is the serious variant: a garbled (but non-empty, hence
+    previously truthy) global LLM_BACKEND would have silently forced every
+    role back to mock even under PROFILE=hybrid/fast, defeating the whole
+    point of switching profiles for the real demo."""
+    import importlib
+
+    monkeypatch.setenv("LLM_BACKEND", "# (blank) | mock | ollama | event")
+    monkeypatch.setenv("PROFILE", "hybrid")
+    from src import config
+
+    importlib.reload(config)
+    assert config.LLM_BACKEND == ""  # garbage treated as blank, not a literal override
+    assert config.resolve_llm_backend("response") == "event"  # hybrid profile's real routing intact
+    assert config.resolve_llm_backend("cleanup") == "ollama"
+    monkeypatch.delenv("LLM_BACKEND", raising=False)
+    monkeypatch.setenv("PROFILE", "mock")
+    importlib.reload(config)  # restore
+
+
+def test_invalid_profile_value_falls_back_to_mock(monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("PROFILE", "not-a-real-profile")
+    from src import config
+
+    importlib.reload(config)
+    assert config.PROFILE == "mock"
+    monkeypatch.setenv("PROFILE", "mock")
+    importlib.reload(config)  # restore

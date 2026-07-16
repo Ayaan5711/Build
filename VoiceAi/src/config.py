@@ -1,8 +1,38 @@
 import os
+import sys
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _valid_env(env_key: str, valid_values: set, default: str) -> str:
+    """
+    Reads an env var, but falls back to `default` (with a loud warning) if
+    the raw value isn't one of the recognized options.
+
+    Real bug this guards against: python-dotenv does NOT strip a trailing
+    "# comment" on a line whose value is blank (e.g. "KEY=   # mock | local"
+    parses as KEY="# mock | local", the ENTIRE comment) -- it only strips
+    inline comments correctly when a real value precedes them. .env.example
+    used to have exactly that pattern on blank "leave this to use the
+    profile default" lines, so leaving them un-edited silently set the
+    backend to a garbage string that matched nothing, which (worse) is
+    *truthy*, so it could silently override profile-based per-role routing
+    entirely. Any typo/stray whitespace/comment now gets caught here
+    instead of being used literally.
+    """
+    raw = os.getenv(env_key, "").strip().lower()
+    if not raw:
+        return default
+    if raw not in valid_values:
+        print(
+            f"[voiceai] WARNING: {env_key}={raw!r} is not one of {sorted(valid_values)} -- "
+            f"ignoring it (likely a stray comment or typo in .env) and using {default!r} instead.",
+            file=sys.stderr,
+        )
+        return default
+    return raw
 
 # --- Cost profiles -------------------------------------------------------
 # One switch to route every pipeline stage to the cheapest capable backend,
@@ -18,7 +48,7 @@ load_dotenv()
 #             it), everything else local Ollama. ~cents per demo. Match day.
 #   hosted -- everything hosted. Max accuracy, highest cost. Fallback if
 #             Ollama misbehaves.
-PROFILE = os.getenv("PROFILE", "mock").lower()
+PROFILE = _valid_env("PROFILE", {"mock", "local", "hybrid", "fast", "hosted"}, "mock")
 
 _PROFILES = {
     "mock": {
@@ -56,13 +86,17 @@ _profile = _PROFILES.get(PROFILE, _PROFILES["mock"])
 # --- Backend selection ---------------------------------------------------
 # Default from the active profile; each can still be explicitly overridden
 # by its own env var (e.g. ASR_BACKEND=event) for one-off experiments.
-ASR_BACKEND = os.getenv("ASR_BACKEND", _profile["asr"])  # mock | local | event
-VISION_BACKEND = os.getenv("VISION_BACKEND", _profile["vision"])  # mock | local (MediaPipe Hands)
-EMBED_BACKEND = os.getenv("EMBED_BACKEND", _profile["embed"])  # mock | ollama | event
-TTS_BACKEND = os.getenv("TTS_BACKEND", _profile["tts"])  # mock | local (espeak-ng, offline, optional)
+# Validated via _valid_env -- an invalid/garbled value (stray comment, typo)
+# is ignored with a warning rather than used literally (see docstring above).
+ASR_BACKEND = _valid_env("ASR_BACKEND", {"mock", "local", "event"}, _profile["asr"])
+VISION_BACKEND = _valid_env("VISION_BACKEND", {"mock", "local"}, _profile["vision"])
+EMBED_BACKEND = _valid_env("EMBED_BACKEND", {"mock", "ollama", "event"}, _profile["embed"])
+TTS_BACKEND = _valid_env("TTS_BACKEND", {"mock", "local"}, _profile["tts"])
 # LLM_BACKEND is a global fallback; per-role routing goes through
 # resolve_llm_backend() below so different stages can use different backends.
-LLM_BACKEND = os.getenv("LLM_BACKEND", "")
+# Default "" (not a profile default) is intentional -- "" means "let the
+# profile decide per role", validated the same way so garbage can't leak in.
+LLM_BACKEND = _valid_env("LLM_BACKEND", {"mock", "ollama", "event"}, "")
 
 
 def resolve_llm_backend(role: str) -> str:
@@ -70,8 +104,9 @@ def resolve_llm_backend(role: str) -> str:
     Precedence: explicit per-role env var > global LLM_BACKEND override >
     active profile's per-role mapping."""
     env_key = f"LLM_BACKEND_{role.upper()}"
-    if os.getenv(env_key):
-        return os.getenv(env_key)
+    per_role = _valid_env(env_key, {"mock", "ollama", "event"}, "")
+    if per_role:
+        return per_role
     if LLM_BACKEND:
         return LLM_BACKEND
     return _profile["llm"].get(role, "mock")
