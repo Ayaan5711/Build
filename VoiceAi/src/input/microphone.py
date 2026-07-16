@@ -74,6 +74,10 @@ class GenAILabASRBackend(ASRBackend):
         self.client = httpx.Client(verify=False)
 
     def transcribe(self, audio_path: str) -> Transcript:
+        from src.cost import get_cost_tracker
+
+        tracker = get_cost_tracker()
+        tracker.check_budget()
         with open(audio_path, "rb") as f:
             resp = self.client.post(
                 f"{config.GENAILAB_BASE_URL}/v1/audio/transcriptions",
@@ -85,7 +89,20 @@ class GenAILabASRBackend(ASRBackend):
         data = resp.json()
         text = data.get("text", "")
         confidence = data.get("confidence", 0.85)
+        # Estimate audio length for Whisper billing; use the reported
+        # duration if present, else a small default so cost is never $0.
+        minutes = float(data.get("duration", 0.0)) / 60.0 or (self._estimate_minutes(audio_path))
+        tracker.record_asr("asr", config.GENAILAB_ASR_MODEL, minutes)
         return Transcript(text=text, confidence=confidence, segments=[TranscriptSegment(text, confidence)])
+
+    @staticmethod
+    def _estimate_minutes(audio_path: str) -> float:
+        # Fallback estimate from file size when the API doesn't return a
+        # duration -- roughly 16kHz 16-bit mono WAV ~= 32 KB/s.
+        try:
+            return max(0.05, os.path.getsize(audio_path) / 32000.0 / 60.0)
+        except OSError:
+            return 0.1
 
 
 def get_asr_backend() -> ASRBackend:

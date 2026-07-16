@@ -6,3 +6,4 @@ __pycache__/
 captured_audio*
 captured_gesture*
 .ipynb_checkpoints/
+.cost_log.json

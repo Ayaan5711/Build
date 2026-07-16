@@ -66,11 +66,25 @@ Every stage in `src/pipeline.py` is a direct call to the module implementing tha
 - **Rich intent extraction** (FR-11) -- goal, action type, entities, constraints, urgency, missing information.
 - **RAG-grounded responses** (FR-12, FR-13) -- Chroma-backed knowledge base seeded with PAS 901 principles + accessibility FAQs; retrieval happens on every turn, not as an optional add-on.
 - **Multimodal fallback** (FR-15) -- voice / camera-sign / text, switchable per turn.
-- **Clear feedback and recovery** (FR-16) -- confirm / correct / retry / switch_modality options whenever confidence is low or information is missing; never fails silently.
+- **Clear feedback and recovery** (FR-16) -- confirm / correct / retry / switch_modality buttons that actually re-run the pipeline (Correct re-runs on your edited text and remembers the fix; Retry re-runs; Switch Modality cycles the input mode); never fails silently.
 - **Privacy note in the UI, no raw audio/video persisted** (FR-18, NFR-06).
 - **Domain-aware assistance** (FR-20) -- pluggable Skills (`faq_lookup`, `schedule_reminder`, `general_help`) feed into the grounded response rather than being the final answer themselves.
 - **Cached fallback scenarios** (NFR-03) -- if every live backend call fails, the pipeline falls back to a precomputed output from `data/demo_scenarios.json` (the PRD's own 10 demo samples) instead of crashing the demo.
+- **Cost tracking + budget cap** -- every hosted call's estimated USD is tracked and shown live in the sidebar; hosted calls are refused once estimated spend crosses `BUDGET_USD_CAP` (then falls back to cached scenarios), so a runaway loop can never drain the ~$25 event budget.
 - **Personalization** -- confirmed corrections are remembered per user and auto-applied on future turns (not a PRD requirement, but compatible with FR-04 and low-cost to keep).
+
+## Cost profiles -- one switch controls spend
+
+The team runs on a fixed ~$25 total budget. Ollama models are already installed on the lab laptop (free); only Whisper ASR and (optionally) the final response call cost money. `PROFILE` in `.env` routes every stage to the cheapest capable backend:
+
+| `PROFILE` | ASR | Cleanup / intent / reasoning / caption | Final response | Embeddings | Est. cost |
+|---|---|---|---|---|---|
+| `mock` (default) | mock | mock | mock | mock | $0 (offline, no key) |
+| `local` | local faster-whisper | Ollama (free) | Ollama (free) | Ollama `gte-large` | **$0, fully offline** |
+| `hybrid` | hosted Whisper | Ollama (free) | hosted `gpt-4o` | Ollama `gte-large` | **~cents/demo** (recommended for match day) |
+| `hosted` | hosted | hosted | hosted | hosted | highest |
+
+The only unavoidable spend is Whisper ASR (~$0.006/min ≈ $0.50 for hundreds of demo utterances). The real budget risk is an accidental loop, which the budget cap prevents. Override any single stage with per-stage env vars (e.g. `LLM_BACKEND_RESPONSE=event` on an otherwise-local profile).
 
 ## Backends -- change config, not code
 

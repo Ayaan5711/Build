@@ -85,12 +85,17 @@ class GenAILabEmbeddingFunction(EmbeddingFunction):
         self.client = httpx.Client(verify=False)
 
     def __call__(self, input):
+        from src.cost import get_cost_tracker
+
+        tracker = get_cost_tracker()
+        tracker.check_budget()
         resp = self.client.post(
             f"{config.GENAILAB_BASE_URL}/v1/embeddings",
             headers={"Authorization": f"Bearer {config.GENAILAB_API_KEY}"},
             json={"model": config.GENAILAB_EMBED_MODEL, "input": input},
         )
         resp.raise_for_status()
+        tracker.record_embedding("embedding", config.GENAILAB_EMBED_MODEL, list(input))
         return [item["embedding"] for item in resp.json()["data"]]
 
     @staticmethod

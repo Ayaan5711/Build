@@ -188,6 +188,7 @@ class GenAILabLLMBackend(LLMBackend):
                 "LLM_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
                 "environment) -- this is the key handed out on match day."
             )
+        self.role = role
         self.model = config.GENAILAB_MODELS.get(role, config.GENAILAB_MODELS["cleanup"])
         client = httpx.Client(verify=False)
         self.llm = ChatOpenAI(
@@ -198,23 +199,36 @@ class GenAILabLLMBackend(LLMBackend):
         )
 
     def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
+        from src.cost import get_cost_tracker
+
+        tracker = get_cost_tracker()
+        prompt = system + "\n" + user
+        # Guardrail: refuse the call if it would push us past the budget cap
+        # (raises BudgetExceeded, which the pipeline treats as a backend
+        # failure and falls back to cached scenarios).
+        tracker.check_budget(tracker.estimate_llm_usd(self.model, prompt, prompt))
         response = self.llm.invoke(
             [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ]
         )
-        return response.content
+        content = response.content
+        tracker.record_llm(self.role, self.model, prompt, content)
+        return content
 
 
 def get_llm_backend(role: str = "cleanup") -> LLMBackend:
     """
-    role selects which model to use per the PRD's model table:
-    "cleanup" | "reasoning" | "intent" | "response" | "caption".
-    Ignored by MockLLMBackend (task= already selects mock behavior).
+    role selects both which backend (per the active cost profile, via
+    config.resolve_llm_backend) AND which model within that backend (per
+    the PRD's model table): "cleanup" | "reasoning" | "intent" |
+    "response" | "caption". This is what lets a single run use free local
+    Ollama for cleanup/intent but hosted gpt-4o for the final response.
     """
-    if config.LLM_BACKEND == "ollama":
+    backend = config.resolve_llm_backend(role)
+    if backend == "ollama":
         return OllamaLLMBackend(role)
-    if config.LLM_BACKEND == "event":
+    if backend == "event":
         return GenAILabLLMBackend(role)
     return MockLLMBackend()
