@@ -1,6 +1,6 @@
 streamlit
 fastapi
-uvicorn[standard]
+uvicorn[standard]>=0.27
 python-multipart
 chromadb
 langchain-openai
