@@ -84,7 +84,7 @@ _SYNONYMS = {
     "class_name": ["class", "section", "grade", "std", "standard", "class section"],
     "date": ["date", "attendance date", "day"],
     "status": ["status", "attendance", "present absent", "p a"],
-    "subject": ["subject", "course", "paper"],
+    "subject": ["subject", "course name", "course", "course code", "paper"],
     "exam": ["exam", "exam name", "test", "assessment", "term"],
     "score": ["score", "marks", "marks obtained", "obtained marks", "total"],
     "max_score": ["max marks", "total marks", "out of", "max score", "full marks"],
@@ -271,17 +271,23 @@ def _resolve_student_id(row, mapped: Dict[str, str], unresolved_names: set) -> O
     return None
 
 
-# ------------------------------------------------------------------ marks --
+# A real marks sheet is often "wide": one row per student, one column per
+# subject (Mathematics, Physics, ...) instead of one row per student+subject.
+# These header names never mean "this column IS a subject", even though
+# they're numeric like a subject score column -- exclude them from the
+# wide-format guess.
+_MARKS_AGGREGATE_HEADERS = {
+    "total", "average", "avg", "overall", "grade", "percentage", "percent", "rank", "result", "remarks", "cgpa", "gpa",
+}
+
+
 def _import_marks(df: pd.DataFrame, filename: str) -> ImportReport:
     report = ImportReport(file=filename, detected_type="marks", rows_seen=len(df))
     mapped = _map_columns(df.columns, ["student_id", "name", "subject", "exam", "score", "max_score"])
     report.mapped_columns = mapped
-    report.unmapped_columns = _unmapped(df.columns, mapped)
 
-    if "score" not in mapped:
-        report.errors.append("No score/marks column found -- cannot import without it.")
-        return report
     if "student_id" not in mapped and "name" not in mapped:
+        report.unmapped_columns = _unmapped(df.columns, mapped)
         report.errors.append("No student ID or name column found -- cannot tell whose marks these are.")
         return report
 
@@ -291,27 +297,71 @@ def _import_marks(df: pd.DataFrame, filename: str) -> ImportReport:
     if "exam" not in mapped:
         report.warnings.append(f"No exam-name column found -- using the filename instead: {default_exam!r}.")
 
+    # Wide format: no single "subject" column, but multiple per-subject
+    # score columns instead (e.g. separate Mathematics/Physics/Chemistry
+    # columns). Real bug this fixes: these used to be silently dropped as
+    # "unmapped columns (ignored)" -- a student's individual subject scores
+    # never made it into the store, only a single overall "Total" did,
+    # breaking a query like "what did Priya score in the math midterm."
+    wide_subject_cols = []
+    if "subject" not in mapped:
+        mapped_originals = set(mapped.values())
+        for c in df.columns:
+            if c in mapped_originals:
+                continue
+            if _normalize_header(c) in _MARKS_AGGREGATE_HEADERS:
+                continue
+            if pd.api.types.is_numeric_dtype(df[c]):
+                wide_subject_cols.append(c)
+
+    consumed = set(mapped.values()) | set(wide_subject_cols)
+    report.unmapped_columns = [c for c in df.columns if c not in consumed]
+    if wide_subject_cols:
+        report.mapped_columns["subject columns (wide format)"] = ", ".join(str(c) for c in wide_subject_cols)
+
+    if "score" not in mapped and not wide_subject_cols:
+        report.errors.append("No score/marks column found -- cannot import without it.")
+        return report
+
     unresolved_names = set()
     for _, row in df.iterrows():
-        try:
-            score = float(row[mapped["score"]])
-        except (ValueError, TypeError):
-            report.warnings.append(f"Unparseable score {row[mapped['score']]!r} -- row skipped.")
-            continue
-        max_score = None
-        if "max_score" in mapped:
-            try:
-                max_score = float(row[mapped["max_score"]])
-            except (ValueError, TypeError):
-                pass
-        subject = str(row[mapped["subject"]]).strip() if "subject" in mapped else "unspecified"
-        exam = str(row[mapped["exam"]]).strip() if "exam" in mapped else default_exam
-
         student_id = _resolve_student_id(row, mapped, unresolved_names)
         if student_id is None:
             continue
-        student_records.upsert_mark(student_id, subject, exam, score, max_score)
-        report.rows_imported += 1
+
+        row_max_score = None
+        if "max_score" in mapped and not pd.isna(row[mapped["max_score"]]):
+            try:
+                row_max_score = float(row[mapped["max_score"]])
+            except (ValueError, TypeError):
+                pass
+
+        if wide_subject_cols:
+            for subject_col in wide_subject_cols:
+                cell = row[subject_col]
+                if pd.isna(cell):
+                    continue  # student didn't take/have a score for this subject -- not an error
+                try:
+                    score = float(cell)
+                except (ValueError, TypeError):
+                    continue  # blank/non-numeric cell for this subject -- not an error, just not sat
+                student_records.upsert_mark(student_id, str(subject_col).strip(), default_exam, score, row_max_score)
+                report.rows_imported += 1
+
+        if "score" in mapped:
+            score_cell = row[mapped["score"]]
+            if pd.isna(score_cell):
+                continue
+            try:
+                score = float(score_cell)
+            except (ValueError, TypeError):
+                if not wide_subject_cols:
+                    report.warnings.append(f"Unparseable score {score_cell!r} -- row skipped.")
+                continue
+            subject = str(row[mapped["subject"]]).strip() if "subject" in mapped else str(mapped["score"]).strip()
+            exam = str(row[mapped["exam"]]).strip() if "exam" in mapped else default_exam
+            student_records.upsert_mark(student_id, subject, exam, score, row_max_score)
+            report.rows_imported += 1
 
     if unresolved_names:
         report.warnings.append(

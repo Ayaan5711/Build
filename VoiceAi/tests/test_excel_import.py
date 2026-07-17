@@ -167,6 +167,88 @@ def test_import_marks_skips_unparseable_score(tmp_path, monkeypatch):
     assert any("unparseable score" in w.lower() for w in report.warnings)
 
 
+def test_import_marks_wide_format_imports_each_subject_column(tmp_path, monkeypatch):
+    """Real bug found on the user's own machine: a real marks sheet had no
+    single 'Subject' column, only one score column per subject
+    (Mathematics/Physics/...) plus a Total/Average/Grade summary -- the
+    per-subject columns used to be silently discarded as "unmapped
+    columns (ignored)", so a query like "what did Priya score in the math
+    midterm" had no data to answer from. Each subject column must become
+    its own mark row; Average/Grade must NOT be mistaken for subjects."""
+    _isolate(monkeypatch, tmp_path)
+    student_records.upsert_student("S001", "Priya Sharma", "8B")
+    path = tmp_path / "marks_midterm.xlsx"
+    pd.DataFrame(
+        {
+            "Roll No": ["S001"],
+            "Name": ["Priya Sharma"],
+            "Mathematics": [78],
+            "Physics": [85],
+            "Chemistry": [90],
+            "Total": [253],
+            "Average": [84.3],
+            "Grade": ["A"],
+        }
+    ).to_excel(path, index=False)
+
+    report = excel_import.import_excel_file(str(path))
+    assert report.detected_type == "marks"
+    assert not report.errors
+
+    marks = {m.subject: m.score for m in student_records.marks_for_student("S001")}
+    assert marks["Mathematics"] == 78
+    assert marks["Physics"] == 85
+    assert marks["Chemistry"] == 90
+    assert marks["Total"] == 253
+    assert "Average" not in marks
+    assert "Grade" not in marks
+    for m in student_records.marks_for_student("S001"):
+        assert m.exam == "Marks Midterm"
+
+
+def test_import_marks_wide_format_skips_blank_subject_cells_without_dropping_the_row(tmp_path, monkeypatch):
+    _isolate(monkeypatch, tmp_path)
+    student_records.upsert_student("S001", "Priya Sharma", "8B")
+    path = tmp_path / "marks_midterm.xlsx"
+    pd.DataFrame({"Roll No": ["S001"], "Mathematics": [78], "Physics": [None]}).to_excel(path, index=False)
+
+    report = excel_import.import_excel_file(str(path))
+    marks = {m.subject: m.score for m in student_records.marks_for_student("S001")}
+    assert marks["Mathematics"] == 78
+    assert "Physics" not in marks
+
+
+def test_import_schedule_maps_course_name_column_to_subject(tmp_path, monkeypatch):
+    """Real bug found on the user's own machine: a real faculty schedule
+    sheet used 'Course Name' instead of 'Subject' -- the synonym list only
+    matched a bare 'Course' header exactly, so every row was rejected with
+    "Missing required column(s) for a schedule: ['subject']" despite
+    day/start/end/room all mapping fine."""
+    _isolate(monkeypatch, tmp_path)
+    path = tmp_path / "faculty_class_schedule.xlsx"
+    pd.DataFrame(
+        {
+            "Day": ["Monday"],
+            "Course Name": ["Physics"],
+            "Course Code": ["PHY101"],
+            "Start Time": ["09:00"],
+            "End Time": ["10:00"],
+            "Room": ["Lab 1"],
+        }
+    ).to_excel(path, index=False)
+
+    report = excel_import.import_excel_file(str(path))
+    assert not report.errors
+    assert report.rows_imported == 1
+    assert report.mapped_columns["subject"] == "Course Name"
+
+    import json
+
+    with open(excel_import._SCHEDULE_PATH) as f:
+        written = json.load(f)
+    assert written[0]["subject"] == "Physics"
+
+
 # --------------------------------------------------------------- schedule --
 def test_import_schedule_writes_to_isolated_schedule_path(tmp_path, monkeypatch):
     _isolate(monkeypatch, tmp_path)
