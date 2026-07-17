@@ -18,7 +18,7 @@ from src.input.vision import GestureResult, MockVisionBackend
 from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
 from src.llm import get_llm_backend
-from src.integrations import reminders_store
+from src.integrations import assignments_store, reminders_store
 from src.pipeline import run_pipeline
 from src.skills import get_skills
 from src.understanding import dialogue_state
@@ -93,6 +93,70 @@ def test_guided_dialogue_is_isolated_per_user(tmp_path, monkeypatch):
     finally:
         dialogue_state.clear_pending_task(user_a)
         dialogue_state.clear_pending_task(user_b)
+
+
+def test_guided_assignment_dialogue_paces_across_four_real_turns(tmp_path, monkeypatch):
+    """The classroom-domain flagship example ("create an assignment for
+    Chapter 5") -- structurally identical to the reminder flow but with
+    three required slots instead of two, reusing the exact same mechanism
+    end to end."""
+    monkeypatch.setattr(assignments_store, "_DB_PATH", str(tmp_path / "assignments.db"))
+    user_id = f"assign-{tmp_path.name}"
+    dialogue_state.reset_all()
+    try:
+        t1 = run_pipeline(text_override="create an assignment", user_id=user_id)
+        assert t1.agent_result.clarification == "Which chapter or topic is this assignment for?"
+        assert "confirm" not in t1.recovery_options.options
+
+        t2 = run_pipeline(text_override="Chapter 5", user_id=user_id)
+        assert t2.agent_result.clarification == "Which class is this assignment for?"
+
+        t3 = run_pipeline(text_override="Class 8B", user_id=user_id)
+        assert t3.agent_result.clarification == "When is this assignment due?"
+
+        t4 = run_pipeline(text_override="next Monday", user_id=user_id)
+        assert t4.agent_result.clarification is None
+        assert "Chapter 5" in t4.final_response.text
+        assert "Class 8B" in t4.final_response.text
+        assert t4.agent_result.skills_used == ["create_assignment"]
+        assert "confirm" in t4.recovery_options.options
+
+        saved = assignments_store.list_assignments(user_id)
+        assert len(saved) == 1
+        assert saved[0].chapter == "Chapter 5"
+        assert saved[0].class_name == "Class 8B"
+        assert saved[0].due_date == "next Monday"
+    finally:
+        dialogue_state.clear_pending_task(user_id)
+
+
+def test_classroom_query_skills_do_not_collide_under_mock_keyword_routing():
+    """Regression lock for a real ambiguity found while building this:
+    "schedule" alone is a substring of both a read-only query ("show my
+    schedule") and a create action ("schedule a reminder"). Both skills'
+    keyword lists were adjusted to avoid the collision -- this pins it."""
+    skills = get_skills()
+    schedule_reminder_kw = skills["schedule_reminder"].keywords
+    class_schedule_kw = skills["class_schedule"].keywords
+    assert "schedule" not in schedule_reminder_kw
+    assert "class" not in class_schedule_kw
+    assert not (set(schedule_reminder_kw) & set(class_schedule_kw))
+
+    dialogue_state.reset_all()
+    try:
+        r1 = run_pipeline(text_override="book appointment tomorrow", user_id="kwtest-a")
+        # Correctly routed to schedule_reminder (missing subject/time under
+        # mock -> asks for the first one) and never to class_schedule.
+        assert r1.agent_result.clarification == "What should I remind you about?"
+
+        r2 = run_pipeline(text_override="show tomorrow's schedule", user_id="kwtest-b")
+        # Correctly routed to class_schedule, not schedule_reminder --
+        # answers directly, no clarifying question about a reminder subject.
+        assert r2.agent_result.clarification is None
+        assert r2.agent_result.skills_used == ["class_schedule"]
+    finally:
+        dialogue_state.clear_pending_task("kwtest-a")
+        dialogue_state.clear_pending_task("kwtest-b")
 
 
 def test_mock_asr_known_fixture_still_works(tmp_path):

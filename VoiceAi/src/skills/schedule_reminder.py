@@ -5,7 +5,10 @@ from src.skills.base import Skill, SkillResult
 class ScheduleReminderSkill(Skill):
     name = "schedule_reminder"
     description = "Schedule a reminder or meeting at a given time. Persisted so it can be looked up later (list_reminders)."
-    keywords = ["schedule", "remind", "meeting", "appointment", "book"]
+    # No bare "schedule" here -- see class_schedule.py's comment; "remind"/
+    # "meeting"/"appointment"/"book" already cover every real trigger
+    # phrase without colliding with "show my schedule" style queries.
+    keywords = ["remind", "meeting", "appointment", "book"]
     parameters = {"time": "string", "subject": "string"}
 
     # Declared in the order they should be asked -- subject first ("what"),

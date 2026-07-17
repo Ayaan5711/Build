@@ -10,3 +10,4 @@ captured_gesture*
 .mediapipe_models/
 venv
 .reminders.db
+.assignments.db

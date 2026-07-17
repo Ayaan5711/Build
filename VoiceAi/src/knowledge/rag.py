@@ -9,6 +9,7 @@ from src import config
 from src.knowledge.embeddings import get_embedding_function
 
 _SEED_DATA_PATH = os.path.join(os.path.dirname(__file__), "seed_data", "accessibility_knowledge.json")
+_CLASSROOM_SEED_DATA_PATH = os.path.join(os.path.dirname(__file__), "seed_data", "classroom_knowledge.json")
 
 
 @dataclass
@@ -67,5 +68,19 @@ def seed_default_knowledge_base(kb: KnowledgeBase):
     skills are added in src/skills/.
     """
     with open(_SEED_DATA_PATH) as f:
+        entries = json.load(f)
+    kb.seed(entries)
+
+
+def seed_classroom_knowledge_base(kb: KnowledgeBase):
+    """
+    Match-day domain content for the classroom/education use case (static,
+    scripted-for-demo facts like today's absent students -- not date-aware
+    the way src/integrations/class_schedule.py's real timetable lookups
+    are, since "who's absent" doesn't have a real live attendance system
+    behind it here). Same additive kb.seed() pattern as
+    seed_default_knowledge_base -- called alongside it, not instead of it.
+    """
+    with open(_CLASSROOM_SEED_DATA_PATH) as f:
         entries = json.load(f)
     kb.seed(entries)

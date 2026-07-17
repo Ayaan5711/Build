@@ -22,7 +22,7 @@ from src import config
 from src.cost import get_cost_tracker, reset_cost_tracker
 from src.input.microphone import get_asr_backend
 from src.knowledge.personalization import UserMemory
-from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
+from src.knowledge.rag import KnowledgeBase, seed_classroom_knowledge_base, seed_default_knowledge_base
 from src.pipeline import run_pipeline
 from src.response.recovery_intent import match_recovery_intent
 from src.skills import get_skills
@@ -46,7 +46,8 @@ async def _lifespan(app: FastAPI):
     kb = KnowledgeBase()
     if kb.collection.count() == 0:
         seed_default_knowledge_base(kb)
-        log.info("Seeded knowledge base with default PAS 901 + FAQ content")
+        seed_classroom_knowledge_base(kb)
+        log.info("Seeded knowledge base with default PAS 901 + FAQ content + classroom domain content")
     yield
 
 

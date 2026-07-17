@@ -10,6 +10,8 @@ Not a single-purpose voice app -- a pipeline that treats voice as one modality a
 
 **Match-day use case: "Simplified Voice Interaction for Users with Cognitive Challenges."** The pipeline now supports genuine multi-turn, paced, slot-filling dialogue (e.g. setting a reminder by answering one plain question at a time, not one complex sentence) with real backend persistence, not just a stub. See [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) (what it does, for a demo presenter), [`docs/DIALOGUE_MANAGEMENT.md`](docs/DIALOGUE_MANAGEMENT.md) (how it works, for engineers), and [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) (a concrete walkthrough).
 
+**Concrete domain: a classroom assistant.** Education is one of the domains the problem statement names directly. Simple factual lookups ("what classes do I have today," "when's my next class," "show absent students") answer in one turn via the existing RAG/FAQ skill path or a small real date-aware schedule lookup (`src/integrations/class_schedule.py` -- genuinely computes "today"/"tomorrow" against the real date, not a static guess). "Create an assignment for Chapter 5" is the domain's own paced-dialogue example -- a three-slot create action reusing the exact same guided-dialogue mechanism as the reminder flow.
+
 ## Interaction redesign -- conversational, not a pipeline console
 
 The original UI (both the HTML/JS frontend and Streamlit) exposed the pipeline
@@ -247,21 +249,25 @@ src/
     embeddings.py                                  # embedding backend abstraction
     personalization.py                               # per-user correction memory
     seed_data/accessibility_knowledge.json             # PAS 901 + FAQ content
+    seed_data/classroom_knowledge.json                   # classroom domain content (absent students, etc.)
   response/
     generate.py                                        # generate_grounded_response()
     recovery.py                                          # decide_recovery_or_confirmation()
   agent/
     agent.py                                              # multi-step agent loop (run_agent) + trace + dialogue continuation
   skills/                                                 # the agent's tools (FR-20)
-    base.py, faq_lookup.py, schedule_reminder.py, list_reminders.py, general_help.py, __init__.py
+    base.py, faq_lookup.py, schedule_reminder.py, list_reminders.py, class_schedule.py, assignment.py, list_assignments.py, general_help.py, __init__.py
   integrations/
     reminders_store.py                                    # real SQLite-backed scheduling persistence
+    assignments_store.py                                    # real SQLite-backed assignment persistence
+    class_schedule.py                                         # real date-aware weekly timetable lookups (not RAG)
 data/
   sample_audio/                  # .txt transcript stand-ins until real clips exist
   sample_gestures/                # .json gesture-label stand-ins until real photos exist
   demo_scenarios.json              # cached fallback outputs for the PRD's 10 demo samples
+  class_schedule.json                # seeded weekly class timetable for the classroom domain
 notebooks/pipeline_demo.ipynb    # executable walkthrough, stage by stage
-tests/                            # 97 tests total: pipeline, agent, dialogue state, reminders, cost/profiles, server API
+tests/                            # 118 tests total: pipeline, agent, dialogue state, reminders, assignments, class schedule, cost/profiles, server API
 docs/
   PRD.md                          # the actual PRD, verbatim
   STATUS_VS_PRD.md                  # FR/NFR trace against the code

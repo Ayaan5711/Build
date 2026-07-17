@@ -1,0 +1,14 @@
+[
+  {"day": "Monday", "subject": "Mathematics", "start_time": "09:00", "end_time": "10:00", "room": "Room 12"},
+  {"day": "Monday", "subject": "Science", "start_time": "10:30", "end_time": "11:30", "room": "Lab 2"},
+  {"day": "Monday", "subject": "English", "start_time": "13:00", "end_time": "14:00", "room": "Room 5"},
+  {"day": "Tuesday", "subject": "History", "start_time": "09:00", "end_time": "10:00", "room": "Room 8"},
+  {"day": "Tuesday", "subject": "Mathematics", "start_time": "10:30", "end_time": "11:30", "room": "Room 12"},
+  {"day": "Wednesday", "subject": "Science", "start_time": "09:00", "end_time": "10:00", "room": "Lab 2"},
+  {"day": "Wednesday", "subject": "Art", "start_time": "10:30", "end_time": "11:30", "room": "Room 3"},
+  {"day": "Wednesday", "subject": "English", "start_time": "13:00", "end_time": "14:00", "room": "Room 5"},
+  {"day": "Thursday", "subject": "Mathematics", "start_time": "09:00", "end_time": "10:00", "room": "Room 12"},
+  {"day": "Thursday", "subject": "Physical Education", "start_time": "10:30", "end_time": "11:30", "room": "Gym"},
+  {"day": "Friday", "subject": "History", "start_time": "09:00", "end_time": "10:00", "room": "Room 8"},
+  {"day": "Friday", "subject": "Science", "start_time": "10:30", "end_time": "11:30", "room": "Lab 2"}
+]

@@ -15,7 +15,13 @@ from src.input.merge import InputContext, merge_inputs
 from src.input.microphone import get_asr_backend
 from src.input.vision import get_vision_backend
 from src.knowledge.personalization import UserMemory
-from src.knowledge.rag import KnowledgeBase, RetrievedSnippet, rag_retrieve, seed_default_knowledge_base
+from src.knowledge.rag import (
+    KnowledgeBase,
+    RetrievedSnippet,
+    rag_retrieve,
+    seed_classroom_knowledge_base,
+    seed_default_knowledge_base,
+)
 from src.llm import get_llm_backend
 from src.response.generate import GroundedResponse, generate_grounded_response
 from src.response.recovery import RecoveryDecision, decide_recovery_or_confirmation
@@ -102,6 +108,7 @@ def _run_pipeline_live(
     # the UI happened to seed it.
     if kb.collection.count() == 0:
         seed_default_knowledge_base(kb)
+        seed_classroom_knowledge_base(kb)
     ctx = {"knowledge_base": kb, "user_memory": user_memory}
     # Whether this turn is answering a question from an in-progress guided
     # dialogue (see src/understanding/dialogue_state.py) -- if so, intent

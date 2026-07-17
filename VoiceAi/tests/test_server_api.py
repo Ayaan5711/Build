@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import app
-from src.integrations import reminders_store
+from src.integrations import assignments_store, reminders_store
 from src.understanding import dialogue_state
 
 client = TestClient(app)
@@ -26,10 +26,11 @@ def _reset_dialogue_and_reminders(tmp_path, monkeypatch):
     test that leaves a guided dialogue mid-flight (e.g. "book appointment"
     is now genuinely under-specified and starts one) would otherwise bleed
     into whichever test runs next, in this file or any other sharing the
-    same pytest process. Reset both the in-memory dialogue state and the
-    reminders DB path around every test in this file."""
+    same pytest process. Reset the in-memory dialogue state and both
+    persisted-store DB paths around every test in this file."""
     dialogue_state.reset_all()
     monkeypatch.setattr(reminders_store, "_DB_PATH", str(tmp_path / "server_test_reminders.db"))
+    monkeypatch.setattr(assignments_store, "_DB_PATH", str(tmp_path / "server_test_assignments.db"))
     yield
     dialogue_state.reset_all()
 
@@ -157,6 +158,41 @@ def test_guided_reminder_dialogue_across_three_api_run_calls():
     saved = reminders_store.list_reminders("demo-user")
     assert len(saved) == 1
     assert saved[0].subject == "the dentist"
+
+
+def test_classroom_schedule_queries_answer_directly_no_pacing_needed():
+    """The read-only classroom lookups (real date logic, not RAG) never
+    need clarification -- each is a single /api/run call."""
+    r = client.post("/api/run", data={"text": "what classes do I have today"})
+    body = r.json()
+    assert body["agent_result"]["clarification"] is None
+    assert body["agent_result"]["skills_used"] == ["class_schedule"]
+
+    r2 = client.post("/api/run", data={"text": "show absent students"})
+    body2 = r2.json()
+    assert "absent" in body2["final_response"]["text"].lower()
+
+
+def test_guided_assignment_dialogue_across_four_api_run_calls():
+    """The classroom domain's own flagship paced example, driven through
+    the real HTTP surface exactly like the reminder flow above."""
+    r1 = client.post("/api/run", data={"text": "create an assignment"})
+    assert r1.json()["final_response"]["text"] == "Which chapter or topic is this assignment for?"
+
+    r2 = client.post("/api/run", data={"text": "Chapter 5"})
+    assert "class" in r2.json()["final_response"]["text"].lower()
+
+    r3 = client.post("/api/run", data={"text": "Class 8B"})
+    assert "due" in r3.json()["final_response"]["text"].lower()
+
+    r4 = client.post("/api/run", data={"text": "next Monday"})
+    body4 = r4.json()
+    assert "Chapter 5" in body4["final_response"]["text"]
+    assert body4["agent_result"]["skills_used"] == ["create_assignment"]
+
+    saved = assignments_store.list_assignments("demo-user")
+    assert len(saved) == 1
+    assert saved[0].chapter == "Chapter 5"
 
 
 def test_run_response_is_json_serializable_dataclass_tree():

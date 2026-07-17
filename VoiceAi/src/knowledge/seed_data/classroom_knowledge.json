@@ -1,0 +1,14 @@
+[
+  {
+    "id": "classroom-absent-today",
+    "source": "Classroom Register",
+    "title": "Absent students",
+    "content": "Students absent today: Priya Sharma (Class 8B), Rohan Verma (Class 8B), Ayesha Khan (Class 9A). All other students are present."
+  },
+  {
+    "id": "classroom-about",
+    "source": "Classroom Assistant",
+    "title": "What this assistant can help with",
+    "content": "This classroom assistant can tell you today's or tomorrow's class schedule, when your next class is, which students are absent today, and can create an assignment for you by asking a few short questions one at a time."
+  }
+]
