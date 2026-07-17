@@ -11,3 +11,8 @@ captured_gesture*
 venv
 .reminders.db
 .assignments.db
+.student_records.db
+# Real student data (PII: names, attendance, marks) -- never committed.
+# See data/incoming/README.md for what belongs here.
+data/incoming/*
+!data/incoming/README.md

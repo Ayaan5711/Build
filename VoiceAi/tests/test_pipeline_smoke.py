@@ -18,7 +18,7 @@ from src.input.vision import GestureResult, MockVisionBackend
 from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
 from src.llm import get_llm_backend
-from src.integrations import assignments_store, reminders_store
+from src.integrations import assignments_store, reminders_store, student_records
 from src.pipeline import run_pipeline
 from src.skills import get_skills
 from src.understanding import dialogue_state
@@ -157,6 +157,34 @@ def test_classroom_query_skills_do_not_collide_under_mock_keyword_routing():
     finally:
         dialogue_state.clear_pending_task("kwtest-a")
         dialogue_state.clear_pending_task("kwtest-b")
+
+
+def test_guided_mark_attendance_dialogue_paces_across_two_real_turns(tmp_path, monkeypatch):
+    """The live-update half of the classroom domain (paired with the
+    bulk Excel importer) -- reuses the same guided-dialogue mechanism as
+    reminders/assignments, this time with two required slots."""
+    monkeypatch.setattr(student_records, "_DB_PATH", str(tmp_path / "students.db"))
+    user_id = f"attend-{tmp_path.name}"
+    dialogue_state.reset_all()
+    try:
+        t1 = run_pipeline(text_override="mark attendance", user_id=user_id)
+        assert t1.agent_result.clarification == "Which student?"
+        assert "confirm" not in t1.recovery_options.options
+
+        t2 = run_pipeline(text_override="Priya Sharma", user_id=user_id)
+        assert t2.agent_result.clarification == "Should I mark them present or absent?"
+
+        t3 = run_pipeline(text_override="mark her absent", user_id=user_id)
+        assert t3.agent_result.clarification is None
+        assert t3.agent_result.skills_used == ["mark_attendance"]
+        assert "confirm" in t3.recovery_options.options
+
+        from datetime import date
+
+        absentees = student_records.absentees_on(date.today().isoformat())
+        assert any(s.name == "Priya Sharma" for s in absentees)
+    finally:
+        dialogue_state.clear_pending_task(user_id)
 
 
 def test_mock_asr_known_fixture_still_works(tmp_path):

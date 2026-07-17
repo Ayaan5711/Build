@@ -10,7 +10,7 @@ Not a single-purpose voice app -- a pipeline that treats voice as one modality a
 
 **Match-day use case: "Simplified Voice Interaction for Users with Cognitive Challenges."** The pipeline now supports genuine multi-turn, paced, slot-filling dialogue (e.g. setting a reminder by answering one plain question at a time, not one complex sentence) with real backend persistence, not just a stub. See [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) (what it does, for a demo presenter), [`docs/DIALOGUE_MANAGEMENT.md`](docs/DIALOGUE_MANAGEMENT.md) (how it works, for engineers), and [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) (a concrete walkthrough).
 
-**Concrete domain: a classroom assistant.** Education is one of the domains the problem statement names directly. Simple factual lookups ("what classes do I have today," "when's my next class," "show absent students") answer in one turn via the existing RAG/FAQ skill path or a small real date-aware schedule lookup (`src/integrations/class_schedule.py` -- genuinely computes "today"/"tomorrow" against the real date, not a static guess). "Create an assignment for Chapter 5" is the domain's own paced-dialogue example -- a three-slot create action reusing the exact same guided-dialogue mechanism as the reminder flow.
+**Concrete domain: a classroom assistant.** Education is one of the domains the problem statement names directly. Simple factual lookups ("what classes do I have today," "when's my next class," "show absent students," "what did Priya score in the midterm") answer in one turn against **real, updatable data** -- a SQLite store (`src/integrations/student_records.py`) for students/attendance/marks, and a real date-aware schedule lookup (`src/integrations/class_schedule.py` -- genuinely computes "today"/"tomorrow" against the real date, not a static guess). "Create an assignment for Chapter 5" and "mark Rohan absent" are the domain's paced-dialogue examples -- both reuse the exact same guided-dialogue mechanism as the reminder flow. A teacher's real spreadsheets (student roster, attendance, marks) and PDFs (policies, handbooks) drop into `data/incoming/` and get ingested with one command -- see "Loading real classroom data" below.
 
 ## Interaction redesign -- conversational, not a pipeline console
 
@@ -213,7 +213,32 @@ class YourSkill(Skill):
 
 ## Adding new RAG knowledge (match-day domain content)
 
-Same pattern -- add entries to `src/knowledge/seed_data/accessibility_knowledge.json` (or call `KnowledgeBase.seed()` directly with real domain FAQs/workflow docs), no code changes needed.
+Same pattern -- add entries to `src/knowledge/seed_data/accessibility_knowledge.json` (or call `KnowledgeBase.seed()` directly with real domain FAQs/workflow docs), no code changes needed. This is for genuinely unstructured/narrative content (policy text, FAQs) -- see the next section for structured data like attendance and marks, which deliberately does **not** go through RAG.
+
+## Loading real classroom data (Excel + PDF, one command)
+
+A real school hands over spreadsheets (student roster, attendance, marks) and PDFs (handbooks, policies), not a clean schema. The importer is built to cope with that without being told column names in advance:
+
+```bash
+# 1. Drop files in (any mix of .xlsx/.xls/.pdf, any reasonable header names):
+#    data/incoming/student_master.xlsx, attendance_july.xlsx, marks_midterm.xlsx,
+#    faculty_class_schedule.xlsx, attendance_policy.pdf, ...
+# 2. Run the importer:
+python scripts/import_classroom_data.py
+```
+
+**Why this needs two different storage engines, not one:** attendance/marks/schedule are exact, row-level, and *change over time* (someone corrects a mark, a student is marked absent today) -- that needs real database semantics (upsert-not-duplicate, exact JOIN queries), not semantic-similarity retrieval. RAG/embeddings can't correctly answer "who is absent **today**" (a computation over live rows), only "what does the policy say about absences" (a genuinely unstructured document). So: structured/exact/updatable data -> SQLite (`src/integrations/student_records.py`, `.student_records.db`); unstructured/narrative content (PDFs) -> the existing RAG knowledge base (`src/integrations/pdf_import.py`).
+
+**How the importer copes with real-world spreadsheets** (`src/integrations/excel_import.py`):
+- **File type is auto-detected** from the filename first (`attendance_july.xlsx` -> attendance), falling back to which columns are present (a `Date`+`Status` pair implies attendance even with an unrecognized filename).
+- **Column headers are fuzzy-matched** against a synonym list per field (e.g. a `name` column matches `"Student Name"`, `"Full Name"`, `"Name"`, ...) -- you don't need to rename anything in the source file.
+- **Every import prints an `ImportReport`**: which columns it mapped to what, which it couldn't place, how many rows imported vs. skipped, and why (unrecognized status value, unparseable score, missing required column, ...). **Always read this after an import** -- it never silently guesses; anything it can't confidently map is reported, not dropped quietly.
+- **Re-running an import updates, not duplicates** -- attendance/marks upsert on `(student, date)`/`(student, subject, exam)`, so a corrected spreadsheet or a re-export just overwrites the old values.
+- **Live voice updates work the same store**: "mark Rohan absent" (a paced `mark_attendance` dialogue) writes to the exact same SQLite tables a bulk Excel re-import would, so a query turn afterward ("who's absent today") sees it immediately -- either update path is safe to mix with the other.
+
+**Privacy:** real student names/attendance/marks are genuine PII. `data/incoming/*` (except its own `README.md`) and `.student_records.db` are gitignored -- source files and the resulting database never get committed. Only synthetic data is used in tests and fixtures.
+
+**Not yet done:** this has only been verified against synthetic fixtures generated in code (see `tests/test_excel_import.py`), not the team's actual spreadsheet files -- run the importer against the real files and read the printed `ImportReport` before the demo to confirm the fuzzy header matching handles their real column names.
 
 ## Project layout
 
@@ -256,18 +281,24 @@ src/
   agent/
     agent.py                                              # multi-step agent loop (run_agent) + trace + dialogue continuation
   skills/                                                 # the agent's tools (FR-20)
-    base.py, faq_lookup.py, schedule_reminder.py, list_reminders.py, class_schedule.py, assignment.py, list_assignments.py, general_help.py, __init__.py
+    base.py, faq_lookup.py, schedule_reminder.py, list_reminders.py, class_schedule.py, assignment.py, list_assignments.py, mark_attendance.py, attendance_query.py, marks_query.py, general_help.py, __init__.py
   integrations/
     reminders_store.py                                    # real SQLite-backed scheduling persistence
     assignments_store.py                                    # real SQLite-backed assignment persistence
     class_schedule.py                                         # real date-aware weekly timetable lookups (not RAG)
+    student_records.py                                          # real SQLite-backed students/attendance/marks store
+    excel_import.py                                               # fuzzy-matching Excel importer -> student_records/schedule
+    pdf_import.py                                                   # PDF text extraction + chunking -> RAG knowledge base
+scripts/
+  import_classroom_data.py       # CLI: import every file in data/incoming/ (see "Loading real classroom data")
 data/
   sample_audio/                  # .txt transcript stand-ins until real clips exist
   sample_gestures/                # .json gesture-label stand-ins until real photos exist
   demo_scenarios.json              # cached fallback outputs for the PRD's 10 demo samples
   class_schedule.json                # seeded weekly class timetable for the classroom domain
+  incoming/                            # drop real Excel/PDF files here (gitignored -- real student PII)
 notebooks/pipeline_demo.ipynb    # executable walkthrough, stage by stage
-tests/                            # 118 tests total: pipeline, agent, dialogue state, reminders, assignments, class schedule, cost/profiles, server API
+tests/                            # 168 tests total: pipeline, agent, dialogue state, reminders, assignments, class schedule, student records, Excel/PDF import, classroom query skills, cost/profiles, server API
 docs/
   PRD.md                          # the actual PRD, verbatim
   STATUS_VS_PRD.md                  # FR/NFR trace against the code
@@ -292,3 +323,4 @@ docs/
 - Voice-driven recovery's keyword phrase lists (`src/response/recovery_intent.py`) are a first pass, not user-tested -- tune the phrase lists if real users phrase confirm/retry/correct/switch differently than expected. It's rule-based specifically so this is a five-minute edit, not a prompt-engineering exercise.
 - **Guided-dialogue slot-filling** (`src/understanding/dialogue_state.py`) is in-memory, single-server-process, single-demo-user scope, matching `server.py`'s existing `_USER_ID = "demo-user"` convention -- a server restart loses an in-progress question (deliberately; see `docs/DIALOGUE_MANAGEMENT.md`) but never a completed reminder (that's persisted separately in `.reminders.db`). Not built for multiple concurrent users.
 - **Another mock-backend bug found and fixed while building the above:** `MockLLMBackend._response()` (`src/llm.py`) silently ignored `skill_output` entirely and always echoed `"Understood: {transcript}"`, even when a skill had already produced a real result -- meaning a completed reminder under the free/offline `mock` profile looked like nothing happened. Fixed to surface `skill_output` when present, matching what the response system prompt already instructs a real LLM to do.
+- **Real classroom data (Excel/PDF importer, `src/integrations/excel_import.py` + `pdf_import.py`) is untested against the team's actual files.** The fuzzy column-matching and file-type detection were built and verified against synthetic fixtures generated in test code (deliberately nonstandard headers like `"Roll No"`, `"Present/Absent"`, `"Class/Section"`), not the real spreadsheets -- run `python scripts/import_classroom_data.py` against the real files in `data/incoming/` and read the printed `ImportReport` before the demo; it will tell you exactly which columns it couldn't map instead of guessing. A related routing bug was found and fixed while building this: the mock LLM router used to always match `faq_lookup`'s bare "what"/"how" keywords before a more specific skill's own keywords (first-match-wins), so "what did Priya score" would always route to the FAQ skill instead of `marks_query`. Fixed by switching to longest-matching-keyword-wins routing (`src/llm.py`'s `MockLLMBackend._agent_step`), which generalizes correctly to any future skill with natural question-phrased keywords.

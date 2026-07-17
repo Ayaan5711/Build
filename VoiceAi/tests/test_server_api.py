@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import app
-from src.integrations import assignments_store, reminders_store
+from src.integrations import assignments_store, reminders_store, student_records
 from src.understanding import dialogue_state
 
 client = TestClient(app)
@@ -26,11 +26,12 @@ def _reset_dialogue_and_reminders(tmp_path, monkeypatch):
     test that leaves a guided dialogue mid-flight (e.g. "book appointment"
     is now genuinely under-specified and starts one) would otherwise bleed
     into whichever test runs next, in this file or any other sharing the
-    same pytest process. Reset the in-memory dialogue state and both
-    persisted-store DB paths around every test in this file."""
+    same pytest process. Reset the in-memory dialogue state and every
+    persisted-store DB path around every test in this file."""
     dialogue_state.reset_all()
     monkeypatch.setattr(reminders_store, "_DB_PATH", str(tmp_path / "server_test_reminders.db"))
     monkeypatch.setattr(assignments_store, "_DB_PATH", str(tmp_path / "server_test_assignments.db"))
+    monkeypatch.setattr(student_records, "_DB_PATH", str(tmp_path / "server_test_students.db"))
     yield
     dialogue_state.reset_all()
 
@@ -193,6 +194,28 @@ def test_guided_assignment_dialogue_across_four_api_run_calls():
     saved = assignments_store.list_assignments("demo-user")
     assert len(saved) == 1
     assert saved[0].chapter == "Chapter 5"
+
+
+def test_mark_attendance_then_query_round_trip_over_real_http():
+    """The live-update half of the classroom domain: mark someone absent
+    via a paced voice dialogue, then confirm a completely separate query
+    turn sees it -- proving both skills share the same real store, not
+    two independent write/read paths that happen to look similar."""
+    r1 = client.post("/api/run", data={"text": "mark attendance"})
+    assert r1.json()["final_response"]["text"] == "Which student?"
+
+    r2 = client.post("/api/run", data={"text": "Rohan Verma"})
+    assert r2.json()["final_response"]["text"] == "Should I mark them present or absent?"
+
+    r3 = client.post("/api/run", data={"text": "absent"})
+    body3 = r3.json()
+    assert body3["agent_result"]["skills_used"] == ["mark_attendance"]
+    assert "Rohan Verma" in body3["final_response"]["text"]
+
+    r4 = client.post("/api/run", data={"text": "who's absent today"})
+    body4 = r4.json()
+    assert body4["agent_result"]["skills_used"] == ["attendance_query"]
+    assert "Rohan Verma" in body4["final_response"]["text"]
 
 
 def test_run_response_is_json_serializable_dataclass_tree():

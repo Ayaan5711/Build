@@ -182,20 +182,37 @@ class MockLLMBackend(LLMBackend):
                 }
             )
 
+        # Best-match-length routing, not first-match-wins: with more
+        # domain skills added over time, a generic single-word keyword
+        # (faq_lookup's bare "what"/"how") will substring-match almost any
+        # question, which would otherwise always beat a more specific
+        # skill's compound-phrase keyword ("what did", "score in") purely
+        # because of which module happens to sort first alphabetically.
+        # Picking the longest matching keyword across all tools makes
+        # specificity win instead of file order. Found while adding
+        # marks/attendance query skills that are naturally phrased as
+        # "what"/"how" questions, same as FAQ lookups are.
+        best_tool = None
+        best_match_len = 0
         for tool in tools:
             if tool["name"] == "general_help":
                 continue
-            if any(kw in lower for kw in tool.get("keywords", [])):
-                return json.dumps(
-                    {
-                        "thought": f"'{text}' matches the {tool['name']} tool; calling it.",
-                        "action": "call_skill",
-                        "skill": tool["name"],
-                        "params": {"query": text, "message": text},
-                        "question": None,
-                        "answer": None,
-                    }
-                )
+            for kw in tool.get("keywords", []):
+                if kw in lower and len(kw) > best_match_len:
+                    best_match_len = len(kw)
+                    best_tool = tool
+
+        if best_tool:
+            return json.dumps(
+                {
+                    "thought": f"'{text}' matches the {best_tool['name']} tool (longest keyword match); calling it.",
+                    "action": "call_skill",
+                    "skill": best_tool["name"],
+                    "params": {"query": text, "message": text},
+                    "question": None,
+                    "answer": None,
+                }
+            )
         return json.dumps(
             {
                 "thought": "No specific tool matches; responding directly.",
