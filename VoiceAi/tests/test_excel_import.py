@@ -225,3 +225,24 @@ def test_unrecognized_file_reports_unknown_and_imports_nothing(tmp_path, monkeyp
     report = excel_import.import_excel_file(str(path))
     assert report.detected_type == "unknown"
     assert report.rows_imported == 0
+
+
+def test_unreadable_file_reports_the_real_error_not_just_unknown(tmp_path, monkeypatch):
+    """Real bug found on the user's own machine: every one of 5 real
+    spreadsheets (including ones with unambiguous filenames like
+    'Attendance_July.xlsx', which the filename check alone should have
+    caught) reported "detected as: unknown / Could not confidently
+    identify this file" with no further detail -- because
+    ImportReport.summary() returned early for detected_type == "unknown"
+    without ever printing report.errors, silently hiding the real reason
+    (pd.read_excel() failing on the actual file) behind a message that
+    implied a column-matching failure instead."""
+    _isolate(monkeypatch, tmp_path)
+    path = tmp_path / "attendance_july.xlsx"
+    path.write_bytes(b"not a real xlsx file, just garbage bytes")
+
+    report = excel_import.import_excel_file(str(path))
+    assert report.detected_type == "unknown"
+    assert report.errors
+    assert "Could not read file" in report.summary()
+    assert report.errors[0] in report.summary()

@@ -42,6 +42,15 @@ class ImportReport:
         lines = [f"{self.file}  ->  detected as: {self.detected_type}"]
         if self.detected_type == "unknown":
             lines.append("  Could not confidently identify this file -- no rows imported.")
+            # Errors/warnings still matter here: "unknown" covers both a
+            # genuine "no column pattern matched" case AND a file that
+            # failed to even open (bad path/corrupt/unsupported format) --
+            # this used to swallow the real reason in the second case,
+            # which is exactly the case someone most needs to see.
+            for w in self.warnings:
+                lines.append(f"  WARNING: {w}")
+            for e in self.errors:
+                lines.append(f"  ERROR: {e}")
             return "\n".join(lines)
         lines.append(f"  rows seen: {self.rows_seen}, rows imported: {self.rows_imported}")
         if self.mapped_columns:
