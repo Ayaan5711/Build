@@ -120,6 +120,14 @@ GENAILAB_BASE_URL = os.getenv("GENAILAB_BASE_URL", "https://genailab.tcs.in")
 GENAILAB_API_KEY = os.getenv("GENAILAB_API_KEY", "")
 GENAILAB_ASR_MODEL = os.getenv("GENAILAB_ASR_MODEL", "azure/genailab-maas-whisper")
 GENAILAB_EMBED_MODEL = os.getenv("GENAILAB_EMBED_MODEL", "azure/genailab-maas-text-embedding-3-large")
+# httpx.Client() defaults to a 5-second timeout on every request phase
+# (connect/read/write/pool) when none is given -- too short for real
+# hosted inference (Whisper transcription especially; README already
+# documents ~13.8s for local whisper-base on a slow laptop, and a hosted
+# call adds network latency on top). Found via a real ReadTimeout on the
+# lab network. 60s is generous without being effectively infinite --
+# override with GENAILAB_TIMEOUT_S if a specific call needs more.
+GENAILAB_TIMEOUT_S = float(os.getenv("GENAILAB_TIMEOUT_S", "60"))
 
 # Final-response model depends on profile: 'fast' uses the lightweight mini
 # (server-GPU fast, cents cheap); other hosted profiles use full gpt-4o for

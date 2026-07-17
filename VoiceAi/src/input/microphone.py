@@ -86,7 +86,10 @@ class GenAILabASRBackend(ASRBackend):
                 "ASR_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
                 "environment) -- this is the key handed out on match day."
             )
-        self.client = httpx.Client(verify=False)
+        # Explicit timeout -- httpx.Client() defaults to 5s otherwise, far
+        # too short for real hosted Whisper transcription (found via a real
+        # ReadTimeout on the lab network). See config.GENAILAB_TIMEOUT_S.
+        self.client = httpx.Client(verify=False, timeout=config.GENAILAB_TIMEOUT_S)
 
     def transcribe(self, audio_path: str) -> Transcript:
         from src.cost import get_cost_tracker

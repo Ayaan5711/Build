@@ -239,12 +239,22 @@ class OllamaLLMBackend(LLMBackend):
 
 class GenAILabLLMBackend(LLMBackend):
     """Event-day backend -- hosted models via genailab.tcs.in, model chosen
-    per role (see config.GENAILAB_MODELS), same client pattern as the
-    hackathon's own sample code."""
+    per role (see config.GENAILAB_MODELS).
+
+    Calls the endpoint directly via httpx rather than langchain_openai's
+    ChatOpenAI. Found via a real request trace: ChatOpenAI(base_url=
+    "https://genailab.tcs.in") builds requests against
+    "https://genailab.tcs.in/chat/completions" with an "Authorization:
+    Bearer <key>" header -- but genailab.tcs.in is a LiteLLM proxy whose
+    confirmed-working route (verified directly against the gateway's own
+    API docs) is "/litellm/openai/deployments/<url-encoded-model>/
+    chat/completions" with an "x-litellm-api-key" header instead. The two
+    are not compatible; hitting the wrong one is a likely contributor to
+    requests hanging/timing out rather than failing fast.
+    """
 
     def __init__(self, role: str = "cleanup"):
         import httpx
-        from langchain_openai import ChatOpenAI
 
         if not config.GENAILAB_API_KEY:
             raise RuntimeError(
@@ -253,15 +263,11 @@ class GenAILabLLMBackend(LLMBackend):
             )
         self.role = role
         self.model = config.GENAILAB_MODELS.get(role, config.GENAILAB_MODELS["cleanup"])
-        client = httpx.Client(verify=False)
-        self.llm = ChatOpenAI(
-            base_url=config.GENAILAB_BASE_URL,
-            model=self.model,
-            api_key=config.GENAILAB_API_KEY,
-            http_client=client,
-        )
+        self.client = httpx.Client(verify=False, timeout=config.GENAILAB_TIMEOUT_S)
 
     def complete(self, system: str, user: str, *, task: str = "", context: dict = None) -> str:
+        import urllib.parse
+
         from src.cost import get_cost_tracker
 
         tracker = get_cost_tracker()
@@ -270,13 +276,22 @@ class GenAILabLLMBackend(LLMBackend):
         # (raises BudgetExceeded, which the pipeline treats as a backend
         # failure and falls back to cached scenarios).
         tracker.check_budget(tracker.estimate_llm_usd(self.model, prompt, prompt))
-        response = self.llm.invoke(
-            [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ]
+
+        encoded_model = urllib.parse.quote(self.model, safe="")
+        url = f"{config.GENAILAB_BASE_URL}/litellm/openai/deployments/{encoded_model}/chat/completions"
+        resp = self.client.post(
+            url,
+            headers={"x-litellm-api-key": config.GENAILAB_API_KEY, "Content-Type": "application/json"},
+            json={
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+            },
         )
-        content = response.content
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"]
         tracker.record_llm(self.role, self.model, prompt, content)
         return content
 
