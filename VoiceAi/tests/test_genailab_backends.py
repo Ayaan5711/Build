@@ -93,8 +93,12 @@ def test_genailab_clients_have_an_explicit_generous_timeout_not_httpxs_default()
     from src.llm import GenAILabLLMBackend
 
     asr = GenAILabASRBackend()
-    assert asr.client.timeout.read == config.GENAILAB_TIMEOUT_S
-    assert asr.client.timeout.read > 5.0
+    # ASR gets its own longer read timeout (see config.GENAILAB_ASR_TIMEOUT_S)
+    # -- a real log showed transcription itself hanging the full 60s ceiling,
+    # not some later stage. Connect stays short so a dead endpoint fails fast.
+    assert asr.client.timeout.read == config.GENAILAB_ASR_TIMEOUT_S
+    assert asr.client.timeout.read > config.GENAILAB_TIMEOUT_S
+    assert asr.client.timeout.connect == 10.0
 
     embed = GenAILabEmbeddingFunction()
     assert embed.client.timeout.read == config.GENAILAB_TIMEOUT_S

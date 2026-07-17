@@ -86,10 +86,16 @@ class GenAILabASRBackend(ASRBackend):
                 "ASR_BACKEND=event requires GENAILAB_API_KEY to be set (in .env or the "
                 "environment) -- this is the key handed out on match day."
             )
-        # Explicit timeout -- httpx.Client() defaults to 5s otherwise, far
-        # too short for real hosted Whisper transcription (found via a real
-        # ReadTimeout on the lab network). See config.GENAILAB_TIMEOUT_S.
-        self.client = httpx.Client(verify=False, timeout=config.GENAILAB_TIMEOUT_S)
+        # Explicit, ASR-specific timeout: a real lab-network log showed
+        # transcription itself (not some later pipeline stage) hanging the
+        # full 60s ceiling and timing out -- the shared hackathon gateway's
+        # transcription time depends on audio length and concurrent load
+        # from other teams, so it needs more headroom than a text LLM call.
+        # Connect stays short so a genuinely dead endpoint still fails fast.
+        self.client = httpx.Client(
+            verify=False,
+            timeout=httpx.Timeout(connect=10.0, read=config.GENAILAB_ASR_TIMEOUT_S, write=30.0, pool=10.0),
+        )
 
     def transcribe(self, audio_path: str) -> Transcript:
         from src.cost import get_cost_tracker

@@ -128,6 +128,14 @@ GENAILAB_EMBED_MODEL = os.getenv("GENAILAB_EMBED_MODEL", "azure/genailab-maas-te
 # lab network. 60s is generous without being effectively infinite --
 # override with GENAILAB_TIMEOUT_S if a specific call needs more.
 GENAILAB_TIMEOUT_S = float(os.getenv("GENAILAB_TIMEOUT_S", "60"))
+# ASR gets its own, longer read timeout: a real lab-network log showed
+# Whisper transcription itself (not some later stage) hanging the full 60s
+# and timing out -- on a hackathon's shared gateway, transcription time
+# depends on both audio length and how many other teams are hitting it at
+# once, so 60s isn't always enough. The *connect* timeout stays short
+# (below) so a genuinely dead endpoint still fails fast instead of always
+# waiting the full ceiling.
+GENAILAB_ASR_TIMEOUT_S = float(os.getenv("GENAILAB_ASR_TIMEOUT_S", "120"))
 
 # Final-response model depends on profile: 'fast' uses the lightweight mini
 # (server-GPU fast, cents cheap); other hosted profiles use full gpt-4o for
