@@ -235,35 +235,6 @@ a, button, input, textarea, summary { font-family: inherit; }
 .btn-small { font-size: 0.82rem; padding: 0.4rem 0.8rem; }
 .btn-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin: 0.75rem 0; }
 
-/* ------------------------------------------------------------ mode tabs --- */
-.mode-tabs {
-  display: flex;
-  gap: 0.3rem;
-  flex-wrap: wrap;
-  margin-bottom: 1.1rem;
-  background: var(--bg-elevated);
-  padding: 0.3rem;
-  border-radius: 999px;
-  border: 1px solid var(--panel-border);
-  width: fit-content;
-}
-.mode-tab {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  border-radius: 999px;
-  padding: 0.5rem 1.1rem;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.mode-tab:hover:not(.active) { color: var(--text); }
-.mode-tab.active {
-  background: var(--accent);
-  color: #06231c;
-}
-
 .voice-toggle {
   display: block;
   font-size: 0.85rem;
@@ -277,25 +248,7 @@ a, button, input, textarea, summary { font-family: inherit; }
 }
 .voice-toggle input { margin-right: 0.5rem; accent-color: var(--accent); }
 
-.mode-panel { margin-bottom: 1rem; }
-
 .status-text { margin-left: 0.6rem; color: var(--muted); font-size: 0.9rem; }
-
-#cameraPreview {
-  width: 100%;
-  max-width: 420px;
-  border-radius: var(--radius);
-  background: #000;
-  display: block;
-  margin: 0.6rem 0;
-  box-shadow: var(--shadow-sm);
-}
-#capturedGesturePreview {
-  max-width: 200px;
-  border-radius: var(--radius-sm);
-  margin-top: 0.6rem;
-  border: 1px solid var(--panel-border);
-}
 
 .field-row { display: flex; gap: 1.2rem; flex-wrap: wrap; margin: 0.6rem 0; }
 .field-row label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.88rem; color: var(--muted); flex: 1; min-width: 200px; }
