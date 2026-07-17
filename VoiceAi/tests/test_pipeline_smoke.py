@@ -394,6 +394,43 @@ def test_cached_fallback_scenario_used_when_pipeline_fails(monkeypatch):
     assert "Book appointment tomorrow" in result.accessible_transcript.text
 
 
+def test_cached_fallback_matches_real_transcript_for_audio_input_not_always_scenario_zero(monkeypatch):
+    """Real bug found live: every voice-input turn that hit a live-backend
+    failure fell back to the SAME cached scenario ("book appointment",
+    demo_scenarios.json's first entry) no matter what was actually said.
+    Cause: the except block in run_pipeline() matched the fallback against
+    `text_override or ""` -- but text_override is None for real audio
+    input (only the text-box demo path sets it), so it always matched
+    against "", which scores 0 for every scenario and defaults to
+    scenarios[0]. This happened even when ASR itself succeeded and a
+    *later* stage failed -- the real transcript existed, it just never
+    reached the fallback matcher. Fixed by threading the ASR result out
+    through partial_state so a later failure can still match on what was
+    actually heard."""
+    import src.input.microphone as microphone_module
+    import src.pipeline as pipeline_module
+    from src.input.microphone import Transcript
+
+    class _StubASR:
+        def transcribe(self, audio_path):
+            return Transcript(text="please call Kiran now", confidence=0.9)
+
+    monkeypatch.setattr(microphone_module, "get_asr_backend", lambda: _StubASR())
+    monkeypatch.setattr(pipeline_module, "get_asr_backend", lambda: _StubASR())
+
+    def _boom_after_asr(text, llm, known_corrections=None):
+        raise RuntimeError("simulated hosted LLM outage in a stage AFTER asr succeeded")
+
+    monkeypatch.setattr(pipeline_module, "normalize_transcript", _boom_after_asr)
+
+    result = run_pipeline(audio_path="fake_audio.wav")
+    assert result.used_fallback_cache
+    # Must match the "call Kiran" scenario, NOT the "book appointment" one
+    # that used to always win via the scenarios[0] default.
+    assert "Kiran" in result.accessible_transcript.text
+    assert "book appointment" not in result.accessible_transcript.text.lower()
+
+
 def test_pipeline_raises_when_fallback_disabled(monkeypatch):
     import src.pipeline as pipeline_module
 

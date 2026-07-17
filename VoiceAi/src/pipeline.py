@@ -93,11 +93,22 @@ def run_pipeline(
     lets the dev/text input mode (and the notebook) skip live ASR while
     still exercising every downstream stage.
     """
+    # Real bug this fixes: for real audio input, text_override is None, so
+    # the except block used to always match the cached-scenario fallback
+    # against "" -- which scores 0 for every scenario and always defaults
+    # to scenarios[0] ("book appointment" in data/demo_scenarios.json),
+    # regardless of what was actually said. This happened even when ASR
+    # succeeded and a *later* stage (e.g. a hosted LLM call) was what
+    # failed -- the real transcript was sitting right there, just never
+    # passed out of _run_pipeline_live. partial_state captures it as soon
+    # as it's available so the fallback can match against real words.
+    partial_state: dict = {}
     try:
-        return _run_pipeline_live(audio_path, image_path, text_override, user_id)
+        return _run_pipeline_live(audio_path, image_path, text_override, user_id, partial_state)
     except Exception as e:  # noqa: BLE001 -- deliberate: NFR-03 resilience
         if config.FALLBACK_TO_CACHED_SCENARIOS:
-            fallback = _load_cached_scenario(text_override or "")
+            match_text = text_override or partial_state.get("transcript_text") or ""
+            fallback = _load_cached_scenario(match_text)
             if fallback:
                 fallback.used_fallback_cache = True
                 fallback.fallback_reason = f"Live pipeline failed ({e}); showing cached scenario output."
@@ -110,6 +121,7 @@ def _run_pipeline_live(
     image_path: Optional[str],
     text_override: Optional[str],
     user_id: str,
+    partial_state: Optional[dict] = None,
 ) -> PipelineResult:
     timings = {}
     pipeline_start = time.perf_counter()
@@ -142,6 +154,8 @@ def _run_pipeline_live(
             transcript = asr.transcribe(audio_path)
         else:
             transcript = None
+        if partial_state is not None and transcript is not None and transcript.text:
+            partial_state["transcript_text"] = transcript.text
 
     with _stage(timings, "vision"):
         sign_result = vision.interpret(image_path) if image_path else None
