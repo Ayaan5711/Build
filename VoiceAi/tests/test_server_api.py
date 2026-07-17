@@ -13,8 +13,25 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server import app
+from src.integrations import reminders_store
+from src.understanding import dialogue_state
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _reset_dialogue_and_reminders(tmp_path, monkeypatch):
+    """server.py uses one shared user_id ("demo-user") for every /api/run
+    call -- correct for a single-demo-laptop deployment, but it means any
+    test that leaves a guided dialogue mid-flight (e.g. "book appointment"
+    is now genuinely under-specified and starts one) would otherwise bleed
+    into whichever test runs next, in this file or any other sharing the
+    same pytest process. Reset both the in-memory dialogue state and the
+    reminders DB path around every test in this file."""
+    dialogue_state.reset_all()
+    monkeypatch.setattr(reminders_store, "_DB_PATH", str(tmp_path / "server_test_reminders.db"))
+    yield
+    dialogue_state.reset_all()
 
 
 def test_index_serves_html():
@@ -113,6 +130,33 @@ def test_skills_endpoint_lists_all_registered_skills():
     assert "faq_lookup" in names
     assert "schedule_reminder" in names
     assert "general_help" in names
+
+
+def test_guided_reminder_dialogue_across_three_api_run_calls():
+    """The real path a browser session takes: three separate POST /api/run
+    requests (server.py's shared demo-user), each one a paced question,
+    ending in a genuinely persisted reminder -- not three independent,
+    unrelated answers."""
+    r1 = client.post("/api/run", data={"text": "book appointment"})
+    assert r1.status_code == 200
+    body1 = r1.json()
+    assert body1["final_response"]["text"] == "What should I remind you about?"
+    assert "confirm" not in body1["recovery_options"]["options"]
+
+    r2 = client.post("/api/run", data={"text": "the dentist"})
+    body2 = r2.json()
+    assert "when" in body2["final_response"]["text"].lower()
+
+    r3 = client.post("/api/run", data={"text": "tomorrow at 4pm"})
+    body3 = r3.json()
+    assert "the dentist" in body3["final_response"]["text"].lower()
+    assert "tomorrow at 4pm" in body3["final_response"]["text"].lower()
+    assert body3["agent_result"]["skills_used"] == ["schedule_reminder"]
+    assert "confirm" in body3["recovery_options"]["options"]
+
+    saved = reminders_store.list_reminders("demo-user")
+    assert len(saved) == 1
+    assert saved[0].subject == "the dentist"
 
 
 def test_run_response_is_json_serializable_dataclass_tree():

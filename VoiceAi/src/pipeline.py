@@ -21,6 +21,7 @@ from src.response.generate import GroundedResponse, generate_grounded_response
 from src.response.recovery import RecoveryDecision, decide_recovery_or_confirmation
 from src.transcript.normalize import AccessibleTranscript, normalize_transcript
 from src.transcript.visual_equivalent import VisualEquivalent, generate_caption_summary_action_preview
+from src.understanding import dialogue_state
 from src.understanding.intent import Intent, extract_intent
 from src.understanding.simplify import SimplifiedSteps, simplify_instructions
 
@@ -102,6 +103,13 @@ def _run_pipeline_live(
     if kb.collection.count() == 0:
         seed_default_knowledge_base(kb)
     ctx = {"knowledge_base": kb, "user_memory": user_memory}
+    # Whether this turn is answering a question from an in-progress guided
+    # dialogue (see src/understanding/dialogue_state.py) -- if so, intent
+    # extraction and RAG retrieval below are skipped: the agent isn't going
+    # to re-plan from scratch, it's just filling the next slot, so those
+    # LLM calls would be pure wasted cost/latency on a flow that's already
+    # multi-turn by nature.
+    continuing_dialogue = bool(dialogue_state.get_pending_task(user_id))
 
     with _stage(timings, "asr"):
         if text_override is not None:
@@ -144,10 +152,13 @@ def _run_pipeline_live(
 
     intent_llm = get_llm_backend("intent")
     with _stage(timings, "intent LLM"):
-        intent = extract_intent(accessible_transcript.text, sign_result, intent_llm)
+        if continuing_dialogue:
+            intent = Intent(goal="continuing_guided_dialogue", action_type="dialogue_continuation")
+        else:
+            intent = extract_intent(accessible_transcript.text, sign_result, intent_llm)
 
     with _stage(timings, "RAG retrieval"):
-        retrieved_context = rag_retrieve(accessible_transcript.text, kb, k=3)
+        retrieved_context = [] if continuing_dialogue else rag_retrieve(accessible_transcript.text, kb, k=3)
 
     with _stage(timings, "agent loop (plan->tool->observe)"):
         agent_result = run_agent(
@@ -161,15 +172,24 @@ def _run_pipeline_live(
 
     response_llm = get_llm_backend("response")
     with _stage(timings, "final response (response LLM)"):
-        final_response = generate_grounded_response(
-            accessible_transcript.text,
-            intent,
-            retrieved_context,
-            accessibility_report,
-            response_llm,
-            skill_output=agent_result.combined_output or None,
-            languages_detected=language_report.languages_detected,
-        )
+        if agent_result.clarification:
+            # A paced guided-dialogue turn: the response IS the next
+            # question, verbatim -- skip LLM synthesis so it can't be
+            # paraphrased into something longer or vaguer, which would
+            # defeat the entire point of pacing one plain question at a
+            # time (also saves an LLM call/cost on what's already a
+            # multi-turn flow).
+            final_response = GroundedResponse(text=agent_result.clarification, used_context=[])
+        else:
+            final_response = generate_grounded_response(
+                accessible_transcript.text,
+                intent,
+                retrieved_context,
+                accessibility_report,
+                response_llm,
+                skill_output=agent_result.combined_output or None,
+                languages_detected=language_report.languages_detected,
+            )
 
     with _stage(timings, "recovery decision (reasoning LLM)"):
         recovery_options = decide_recovery_or_confirmation(
@@ -182,6 +202,13 @@ def _run_pipeline_live(
             if "correct" not in recovery_options.options:
                 recovery_options.options = list(recovery_options.options) + ["correct"]
             recovery_options.reason = f"agent needs clarification: {agent_result.clarification}"
+            # Mid guided-dialogue there's nothing to "confirm" yet -- the
+            # response is a question, not a proposed action -- so offering
+            # a Confirm button here would be confusing. Correct/Retry/
+            # Switch Modality all still make sense (answer differently,
+            # re-record, or switch how you're answering).
+            if dialogue_state.get_pending_task(user_id) and "confirm" in recovery_options.options:
+                recovery_options.options = [o for o in recovery_options.options if o != "confirm"]
 
     total_ms = round((time.perf_counter() - pipeline_start) * 1000, 1)
     return PipelineResult(

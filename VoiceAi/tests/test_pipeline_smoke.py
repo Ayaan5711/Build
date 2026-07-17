@@ -18,8 +18,10 @@ from src.input.vision import GestureResult, MockVisionBackend
 from src.knowledge.personalization import UserMemory
 from src.knowledge.rag import KnowledgeBase, seed_default_knowledge_base
 from src.llm import get_llm_backend
+from src.integrations import reminders_store
 from src.pipeline import run_pipeline
 from src.skills import get_skills
+from src.understanding import dialogue_state
 from src.understanding.simplify import needs_simplification, simplify_instructions
 
 
@@ -30,6 +32,67 @@ def test_full_pipeline_via_text_override(tmp_path):
     assert "speech_impairment" in result.accessibility_report.barriers_detected
     assert result.final_response.text
     assert result.recovery_options is not None
+
+
+def test_guided_reminder_dialogue_paces_across_three_real_turns(tmp_path, monkeypatch):
+    """End-to-end for the "Simplified Voice Interaction for Users with
+    Cognitive Challenges" problem statement: setting a reminder is
+    genuinely paced -- one plain question at a time across three separate
+    run_pipeline() calls (each standing in for a separate /api/run request
+    a real user would make) -- not a single-shot "give me everything at
+    once" utterance. Also proves the reminder is really persisted, not
+    just claimed."""
+    monkeypatch.setattr(reminders_store, "_DB_PATH", str(tmp_path / "reminders.db"))
+    user_id = f"guided-{tmp_path.name}"
+    dialogue_state.reset_all()
+    try:
+        turn1 = run_pipeline(text_override="B-b-b-book appointment tomorrow", user_id=user_id)
+        assert turn1.agent_result.clarification == "What should I remind you about?"
+        assert turn1.final_response.text == "What should I remind you about?"
+        assert "confirm" not in turn1.recovery_options.options
+
+        turn2 = run_pipeline(text_override="calling the dentist", user_id=user_id)
+        assert turn2.agent_result.clarification == "When should I remind you? For example, 'tomorrow at 5pm'."
+        assert "confirm" not in turn2.recovery_options.options
+
+        turn3 = run_pipeline(text_override="tomorrow at 3pm", user_id=user_id)
+        assert turn3.agent_result.clarification is None
+        assert "calling the dentist" in turn3.final_response.text
+        assert "tomorrow at 3pm" in turn3.final_response.text
+        assert turn3.agent_result.skills_used == ["schedule_reminder"]
+        assert "confirm" in turn3.recovery_options.options
+
+        saved = reminders_store.list_reminders(user_id)
+        assert len(saved) == 1
+        assert saved[0].subject == "calling the dentist"
+        assert saved[0].time == "tomorrow at 3pm"
+    finally:
+        dialogue_state.clear_pending_task(user_id)
+
+
+def test_guided_dialogue_is_isolated_per_user(tmp_path, monkeypatch):
+    """Two different users mid-reminder-setup at the same time must not
+    cross-talk -- server.py currently uses one shared user_id for the
+    whole demo, but the underlying mechanism itself must still be
+    per-user-correct."""
+    monkeypatch.setattr(reminders_store, "_DB_PATH", str(tmp_path / "reminders.db"))
+    user_a, user_b = f"a-{tmp_path.name}", f"b-{tmp_path.name}"
+    dialogue_state.reset_all()
+    try:
+        run_pipeline(text_override="book appointment", user_id=user_a)
+        run_pipeline(text_override="book appointment", user_id=user_b)
+        assert dialogue_state.get_pending_task(user_a).asked_slot == "subject"
+        assert dialogue_state.get_pending_task(user_b).asked_slot == "subject"
+
+        run_pipeline(text_override="user a's subject", user_id=user_a)
+        # user_b's pending task must be untouched by user_a's turn -- still
+        # waiting on "subject", never received user a's answer.
+        assert dialogue_state.get_pending_task(user_b).asked_slot == "subject"
+        assert "subject" not in dialogue_state.get_pending_task(user_b).filled_slots
+        assert dialogue_state.get_pending_task(user_a).filled_slots.get("subject") == "user a's subject"
+    finally:
+        dialogue_state.clear_pending_task(user_a)
+        dialogue_state.clear_pending_task(user_b)
 
 
 def test_mock_asr_known_fixture_still_works(tmp_path):

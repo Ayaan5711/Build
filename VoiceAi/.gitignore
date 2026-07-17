@@ -9,3 +9,4 @@ captured_gesture*
 .cost_log.json
 .mediapipe_models/
 venv
+.reminders.db

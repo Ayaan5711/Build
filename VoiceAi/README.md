@@ -6,7 +6,9 @@ If a human can understand the speaker, AI should be able to understand them too.
 
 ## What this is
 
-Not a single-purpose voice app -- a pipeline that treats voice as one modality among several (mic, camera/sign, text), detects real accessibility barriers (speech impairments, accents, code-mixed language, noise, sign interaction, cognitive load), and grounds every response in retrieved knowledge before presenting it for confirmation. The actual match-day use case isn't known yet; new domain behavior is added as one new file in `src/skills/`, with zero changes to the core pipeline (see "Adding a new skill" below).
+Not a single-purpose voice app -- a pipeline that treats voice as one modality among several (mic, camera/sign, text), detects real accessibility barriers (speech impairments, accents, code-mixed language, noise, sign interaction, cognitive load), and grounds every response in retrieved knowledge before presenting it for confirmation. New domain behavior is added as one new file in `src/skills/`, with zero changes to the core pipeline (see "Adding a new skill" below).
+
+**Match-day use case: "Simplified Voice Interaction for Users with Cognitive Challenges."** The pipeline now supports genuine multi-turn, paced, slot-filling dialogue (e.g. setting a reminder by answering one plain question at a time, not one complex sentence) with real backend persistence, not just a stub. See [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) (what it does, for a demo presenter), [`docs/DIALOGUE_MANAGEMENT.md`](docs/DIALOGUE_MANAGEMENT.md) (how it works, for engineers), and [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) (a concrete walkthrough).
 
 ## Interaction redesign -- conversational, not a pipeline console
 
@@ -239,6 +241,7 @@ src/
   understanding/
     intent.py                                 # extract_intent()
     simplify.py                                 # step-by-step simplification (FR-08)
+    dialogue_state.py                             # guided, paced multi-turn slot-filling (cognitive-load use case)
   knowledge/
     rag.py                                       # KnowledgeBase, rag_retrieve()
     embeddings.py                                  # embedding backend abstraction
@@ -248,16 +251,23 @@ src/
     generate.py                                        # generate_grounded_response()
     recovery.py                                          # decide_recovery_or_confirmation()
   agent/
-    agent.py                                              # multi-step agent loop (run_agent) + trace
+    agent.py                                              # multi-step agent loop (run_agent) + trace + dialogue continuation
   skills/                                                 # the agent's tools (FR-20)
-    base.py, faq_lookup.py, schedule_reminder.py, general_help.py, __init__.py
+    base.py, faq_lookup.py, schedule_reminder.py, list_reminders.py, general_help.py, __init__.py
+  integrations/
+    reminders_store.py                                    # real SQLite-backed scheduling persistence
 data/
   sample_audio/                  # .txt transcript stand-ins until real clips exist
   sample_gestures/                # .json gesture-label stand-ins until real photos exist
   demo_scenarios.json              # cached fallback outputs for the PRD's 10 demo samples
 notebooks/pipeline_demo.ipynb    # executable walkthrough, stage by stage
-tests/                            # 48 tests total: pipeline, agent, cost/profiles, server API
-docs/PRD.md                      # the actual PRD, verbatim
+tests/                            # 97 tests total: pipeline, agent, dialogue state, reminders, cost/profiles, server API
+docs/
+  PRD.md                          # the actual PRD, verbatim
+  STATUS_VS_PRD.md                  # FR/NFR trace against the code
+  USER_GUIDE.md                       # adaptive/paced interaction, for a demo presenter
+  DIALOGUE_MANAGEMENT.md                # slot-filling dialogue architecture, for engineers
+  DEMO_SCRIPT.md                          # concrete walkthrough of the cognitive-friendly flow
 ```
 
 ## Known limitations (by design, for now)
@@ -273,3 +283,5 @@ docs/PRD.md                      # the actual PRD, verbatim
 - **Two real bugs found via that Playwright verification, both fixed:** (1) `.result-section { display: block; }` in `style.css` was unconditionally overriding the `hidden` attribute on the technical-details panel -- meaning it was visibly rendering (empty) on page load even before any interaction, which likely contributed to the original "feels like a monitor/log screen" complaint. Removed; visibility is now purely driven by the `hidden` attribute and the "Show details" toggle. (2) `MockVisionBackend.interpret()` had the exact same failure shape the mock ASR backend used to have: it raised `FileNotFoundError` for a real captured gesture image (no sidecar `.json` fixture), which the pipeline's NFR-03 resilience layer silently caught and replaced with an unrelated cached demo scenario -- meaning the redesigned one-tap gesture flow would have silently shown a fake "book an appointment" response for *any* real gesture captured under `VISION_BACKEND=mock` (the default profile's setting). Fixed the same way the ASR bug was: return an honest "no gesture detected" result instead of raising. Both have regression tests (`test_gesture_mock_backend_real_capture_gives_no_gesture_not_a_crash` in `tests/test_pipeline_smoke.py`).
 - Language-matched replies depend on the LLM backend actually following the instruction -- only meaningful with `LLM_BACKEND=ollama` or `event`; the `mock` backend always ignores it (plumbing stub, documented above). Language-matched TTS voice depends on the OS/browser having a Hindi/Bengali voice pack installed -- if not, `speechSynthesis` falls back to the default voice and pronunciation of non-Latin-script text won't be accurate. Neither of these is something the code can fix; both are real hardware/OS constraints, verify on the lab machine.
 - Voice-driven recovery's keyword phrase lists (`src/response/recovery_intent.py`) are a first pass, not user-tested -- tune the phrase lists if real users phrase confirm/retry/correct/switch differently than expected. It's rule-based specifically so this is a five-minute edit, not a prompt-engineering exercise.
+- **Guided-dialogue slot-filling** (`src/understanding/dialogue_state.py`) is in-memory, single-server-process, single-demo-user scope, matching `server.py`'s existing `_USER_ID = "demo-user"` convention -- a server restart loses an in-progress question (deliberately; see `docs/DIALOGUE_MANAGEMENT.md`) but never a completed reminder (that's persisted separately in `.reminders.db`). Not built for multiple concurrent users.
+- **Another mock-backend bug found and fixed while building the above:** `MockLLMBackend._response()` (`src/llm.py`) silently ignored `skill_output` entirely and always echoed `"Understood: {transcript}"`, even when a skill had already produced a real result -- meaning a completed reminder under the free/offline `mock` profile looked like nothing happened. Fixed to surface `skill_output` when present, matching what the response system prompt already instructs a real LLM to do.

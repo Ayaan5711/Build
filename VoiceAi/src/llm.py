@@ -111,6 +111,15 @@ class MockLLMBackend(LLMBackend):
     @staticmethod
     def _response(user: str, context: dict = None) -> str:
         payload = json.loads(user)
+        # A domain skill already produced the real result (e.g. a saved
+        # reminder) -- surface it, matching what RESPONSE_SYSTEM_PROMPT
+        # instructs a real LLM to do ("incorporate it naturally"). Silently
+        # dropping this and echoing the transcript instead made completed
+        # tasks under the free/offline mock profile look like nothing
+        # happened, even when something real (a persisted reminder) did.
+        skill_output = payload.get("skill_output")
+        if skill_output:
+            return skill_output
         return f"Understood: {payload.get('accessible_transcript', '')}"
 
     # -- decide_recovery_or_confirmation ---------------------------------------------
