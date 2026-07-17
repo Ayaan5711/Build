@@ -115,7 +115,19 @@ class GenAILabASRBackend(ASRBackend):
         confidence = data.get("confidence", 0.85)
         # Estimate audio length for Whisper billing; use the reported
         # duration if present, else a small default so cost is never $0.
-        minutes = float(data.get("duration", 0.0)) / 60.0 or (self._estimate_minutes(audio_path))
+        # Real bug this guards against: data.get("duration", 0.0) only
+        # applies the default when the key is ABSENT -- if the gateway
+        # returns "duration": null (present but null), .get() returns
+        # None and float(None) raises TypeError, which used to crash the
+        # whole transcribe() call *after* a real transcription already
+        # succeeded, discarding it into the NFR-03 cached-scenario
+        # fallback for a purely cosmetic cost-estimate failure.
+        raw_duration = data.get("duration")
+        try:
+            minutes = float(raw_duration) / 60.0 if raw_duration else 0.0
+        except (ValueError, TypeError):
+            minutes = 0.0
+        minutes = minutes or self._estimate_minutes(audio_path)
         tracker.record_asr("asr", config.GENAILAB_ASR_MODEL, minutes)
         return Transcript(text=text, confidence=confidence, segments=[TranscriptSegment(text, confidence)])
 

@@ -127,3 +127,25 @@ def test_genailab_asr_backend_still_uses_the_v1_path_with_bearer_auth():
     req = capture.request
     assert str(req.url) == f"{config.GENAILAB_BASE_URL}/v1/audio/transcriptions"
     assert req.headers["authorization"] == f"Bearer sk-test-key-123"
+
+
+def test_genailab_asr_backend_survives_a_null_duration_in_the_response(monkeypatch, tmp_path):
+    """Real bug: data.get("duration", 0.0) only applies the 0.0 default
+    when the key is ABSENT -- a response with "duration": null (present
+    but None) made .get() return None, and float(None) raised TypeError
+    *after* a real transcription had already succeeded, discarding the
+    whole successful result into the NFR-03 cached-scenario fallback over
+    a purely cosmetic cost-estimate failure."""
+    from src.input.microphone import GenAILabASRBackend
+
+    def _fake_response(request):
+        return httpx.Response(200, json={"text": "hello world", "confidence": 0.9, "duration": None})
+
+    backend = GenAILabASRBackend()
+    backend.client = httpx.Client(transport=httpx.MockTransport(_fake_response))
+
+    audio_file = tmp_path / "clip.wav"
+    audio_file.write_bytes(b"fake wav bytes")
+
+    result = backend.transcribe(str(audio_file))
+    assert result.text == "hello world"
