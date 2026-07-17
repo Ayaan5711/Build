@@ -1,9 +1,12 @@
 import json
+import logging
 import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Optional
+
+log = logging.getLogger("voiceai")
 
 from src import config
 from src.agent.agent import AgentResult, AgentStep, run_agent
@@ -60,11 +63,23 @@ class PipelineResult:
 
 @contextmanager
 def _stage(timings: dict, name: str):
+    # Logged on entry (not just recorded on exit) specifically so a stage
+    # that hangs -- e.g. a hosted LLM call that times out -- shows up in
+    # the log as "started, never finished" instead of vanishing entirely.
+    # Before this, a mid-pipeline exception discarded the whole `timings`
+    # dict (it's only returned on success), so a real hang under
+    # PROFILE=hosted was invisible: the log jumped straight from the last
+    # *successful* HTTP call to the NFR-03 fallback warning, tens of
+    # seconds later, with zero indication of which of the ~8 LLM-touching
+    # stages was the one actually stuck.
+    log.info("  .. stage start: %s", name)
     start = time.perf_counter()
     try:
         yield
     finally:
-        timings[name] = round((time.perf_counter() - start) * 1000, 1)
+        elapsed = round((time.perf_counter() - start) * 1000, 1)
+        timings[name] = elapsed
+        log.info("  .. stage done:  %s (%.0fms)", name, elapsed)
 
 
 def run_pipeline(
