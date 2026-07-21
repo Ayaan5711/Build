@@ -1,0 +1,287 @@
+@startuml TCS_iON_Voice_AI_Architecture
+skinparam componentStyle rectangle
+skinparam backgroundColor #FFFFFF
+skinparam shadowing false
+skinparam roundcorner 8
+skinparam component {
+  BackgroundColor #F5F7FA
+  BorderColor #4A5568
+  FontSize 12
+}
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #2D3748
+  FontStyle bold
+}
+skinparam database {
+  BackgroundColor #FFF3CD
+  BorderColor #8A6D00
+}
+skinparam cloud {
+  BackgroundColor #E6F0FF
+  BorderColor #1A4E9E
+}
+skinparam note {
+  BackgroundColor #FFFDE7
+  BorderColor #B7A400
+}
+
+title TCS iON Voice AI -- End-to-End Architecture (PRD Appendix A pipeline, stage for stage)
+
+'============================== USER-FACING SURFACES ==============================
+package "UI Surfaces (two, same pipeline underneath)" {
+  component "app.py\n(Streamlit dashboard)" as streamlit
+  package "server.py + frontend/ (FastAPI + HTML/CSS/JS)" as fastapi_pkg {
+    component "server.py\n(thin API wrapper, no pipeline logic)" as server
+    component "frontend/index.html + style.css" as html
+    component "frontend/app.js\n(tap-to-talk, silence-detect,\ngesture capture, speechSynthesis TTS,\nvoice-driven recovery listener)" as appjs
+  }
+}
+
+'============================== ORCHESTRATION ==============================
+package "src/pipeline.py -- run_pipeline() orchestrator" as pipeline_pkg {
+  component "run_pipeline()\n(try live, except -> NFR-03 fallback)" as run_pipeline
+  component "_run_pipeline_live()\n(the real Appendix A flow, stage by stage)" as pipeline_live
+  component "_stage() context manager\n(per-stage entry/exit log + timings_ms)" as stage_ctx
+  component "_load_cached_scenario()\n(matches partial_state.transcript_text\nor text_override against\ndata/demo_scenarios.json)" as cached_fallback
+  database "data/demo_scenarios.json\n(10 PRD cached demo samples)" as demo_json
+}
+
+'============================== INPUT LAYER ==============================
+package "src/input/ -- Input Layer (FR-01,02,14)" {
+  component "microphone.py\nget_asr_backend()\n[Mock | LocalWhisper | GenAILab]" as asr
+  component "vision.py\nget_vision_backend()\n[Mock | MediaPipe HandLandmarker]" as vision
+  component "merge.py\nmerge_inputs()\n-> InputContext" as merge
+}
+
+'============================== ANALYSIS LAYER ==============================
+package "src/analysis/ -- Analysis Layer" {
+  component "disfluency.py\ndetect_stammering()\n(rule-based, FR-03)" as disfluency
+  component "language.py\ndetect_language_mix()\n(rule-based, FR-05)" as language
+  component "accent_noise.py\nanalyze_accent_noise_confidence()\n(reasoning LLM, FR-06)" as accent_noise
+  component "accessibility_report.py\nanalyze_accessibility()\n(reasoning LLM, FR-09)" as accessibility
+}
+
+'============================== TRANSCRIPT LAYER ==============================
+package "src/transcript/ -- Transcript Layer" {
+  component "normalize.py\nnormalize_transcript()\n(cleanup LLM + user corrections, FR-04)" as normalize
+  component "visual_equivalent.py\ngenerate_caption_summary_action_preview()\n(caption LLM, FR-07/17)" as visual_eq
+}
+
+'============================== UNDERSTANDING LAYER ==============================
+package "src/understanding/ -- Understanding Layer" {
+  component "intent.py\nextract_intent()\n(intent LLM, FR-11)" as intent
+  component "simplify.py\nsimplify_instructions()\n(cleanup LLM, FR-08)" as simplify
+  component "dialogue_state.py\nPendingTask store\n(paced multi-turn slot-filling,\ncognitive-load use case)" as dialogue_state
+}
+
+'============================== KNOWLEDGE LAYER ==============================
+package "src/knowledge/ -- Knowledge Layer (FR-12,13)" {
+  component "rag.py\nKnowledgeBase / rag_retrieve()" as rag
+  component "embeddings.py\nget_embedding_function()\n[Mock | Ollama | GenAILab]" as embed
+  component "personalization.py\nUserMemory\n(per-user correction memory)" as personalization
+  database "seed_data/accessibility_knowledge.json\n(PAS 901 + FAQs)" as kb_seed_a
+  database "seed_data/classroom_knowledge.json\n(classroom FAQs)" as kb_seed_c
+  database ".chroma/\n(ChromaDB persistent vector store)" as chroma
+}
+
+'============================== AGENT + SKILLS ==============================
+package "src/agent/ + src/skills/ -- Agentic Flow (FR-20)" {
+  component "agent.py\nrun_agent()\n(plan -> call_skill -> observe loop,\nAGENT_MAX_STEPS guard,\n_continue_pending_dialogue())" as agent
+  component "skills/base.py\nSkill + required_slots\n+ missing_slots()" as skill_base
+  component "faq_lookup.py" as sk_faq
+  component "schedule_reminder.py\nlist_reminders.py" as sk_reminder
+  component "class_schedule.py" as sk_schedule
+  component "assignment.py\nlist_assignments.py" as sk_assignment
+  component "mark_attendance.py" as sk_mark_att
+  component "attendance_query.py" as sk_att_query
+  component "marks_query.py" as sk_marks
+  component "general_help.py" as sk_help
+}
+
+'============================== INTEGRATIONS / PERSISTENCE ==============================
+package "src/integrations/ -- Real Persistence + Data Ingestion" {
+  component "reminders_store.py" as reminders_store
+  component "assignments_store.py" as assignments_store
+  component "student_records.py\n(students / attendance / marks)" as student_records
+  component "class_schedule.py\n(real date-aware lookups,\nNOT RAG)" as class_schedule_integ
+  component "excel_import.py\n(fuzzy header match,\nfile-type auto-detect,\nwide-format marks,\nImportReport)" as excel_import
+  component "pdf_import.py\n(text extract + chunk -> RAG)" as pdf_import
+  database ".reminders.db" as db_reminders
+  database ".assignments.db" as db_assignments
+  database ".student_records.db" as db_students
+  database "data/class_schedule.json" as schedule_json
+  database "data/incoming/\n(real Excel/PDF, gitignored PII)" as incoming
+}
+component "scripts/import_classroom_data.py\n(CLI: scans data/incoming/,\ndispatches by type, seeds KB)" as import_script
+
+'============================== RESPONSE LAYER ==============================
+package "src/response/ -- Response Layer" {
+  component "generate.py\ngenerate_grounded_response()\n(response LLM, language-matched, FR-12)" as generate
+  component "recovery.py\ndecide_recovery_or_confirmation()\n(reasoning LLM, FR-16)" as recovery
+  component "recovery_intent.py\nmatch_recovery_intent()\n(rule-based keyword match,\nvoice-driven confirm/retry/correct/switch)" as recovery_intent
+}
+
+'============================== CONFIG + COST ==============================
+package "src/config.py -- Backend Routing (PROFILE switch)" as config_pkg {
+  component "PROFILE: mock|local|hybrid|fast|hosted\nresolve_llm_backend(role)\nGENAILAB_TIMEOUT_S / GENAILAB_ASR_TIMEOUT_S" as config
+}
+package "src/llm.py -- LLM Backend Abstraction" {
+  component "MockLLMBackend\n(rule-based + longest-keyword-match router)" as mock_llm
+  component "OllamaLLMBackend" as ollama_llm
+  component "GenAILabLLMBackend\n(direct httpx,\n/litellm/openai/deployments/<model>/\nchat/completions,\nx-litellm-api-key)" as genailab_llm
+}
+component "src/cost.py\nCostTracker + BUDGET_USD_CAP" as cost
+
+'============================== EXTERNAL SYSTEMS ==============================
+cloud "genailab.tcs.in\n(LiteLLM proxy -> Azure OpenAI)" as genailab {
+  component "azure/genailab-maas-whisper\n(/v1/audio/transcriptions)" as ext_whisper
+  component "azure/genailab-maas-gpt-4o(-mini)\n(/litellm/openai/deployments/.../chat/completions)" as ext_gpt
+  component "azure_ai/genailab-maas-DeepSeek-R1" as ext_deepseek
+  component "azure/genailab-maas-text-embedding-3-large\n(/v1/embeddings)" as ext_embed
+}
+node "Ollama (local, lab laptop)" as ollama {
+  component "llama-3.2-3b-it, gemma-3-4b-it,\ndeepseek-r1, gte-large" as ollama_models
+}
+
+'============================== FLOW: user turn through the pipeline ==============================
+streamlit --> run_pipeline
+appjs --> server
+server --> run_pipeline
+run_pipeline --> pipeline_live : try
+pipeline_live -[#B7A400,dashed]-> cached_fallback : except\n(NFR-03 resilience)
+cached_fallback --> demo_json
+run_pipeline .[#888]. stage_ctx : wraps every stage,\nlogs start/done + timings_ms
+
+pipeline_live --> asr : audio_path
+pipeline_live --> vision : image_path
+asr --> merge
+vision --> merge
+merge --> disfluency
+merge --> language
+merge --> accent_noise
+disfluency --> normalize
+language --> normalize
+accent_noise --> normalize
+normalize --> visual_eq
+normalize --> accessibility
+normalize --> simplify
+simplify --> intent
+intent --> rag : rag_retrieve()\n(skipped if continuing_dialogue)
+rag --> agent
+intent --> agent
+agent --> generate
+generate --> recovery
+recovery --> pipeline_live : PipelineResult
+
+' partial transcript threaded to fallback matcher (real bug fix)
+asr .[#B7A400,dashed]. cached_fallback : partial_state["transcript_text"]\n(fixed: fallback used to always\nmatch "" -> scenarios[0])
+
+' dialogue state <-> agent
+agent <--> dialogue_state : PendingTask\n(get / start / advance / complete)
+appjs --> recovery_intent : /api/recovery-intent\n(spoken confirm/retry/correct/switch)
+
+' agent -> skills
+agent --> skill_base
+skill_base <|-- sk_faq
+skill_base <|-- sk_reminder
+skill_base <|-- sk_schedule
+skill_base <|-- sk_assignment
+skill_base <|-- sk_mark_att
+skill_base <|-- sk_att_query
+skill_base <|-- sk_marks
+skill_base <|-- sk_help
+
+sk_faq --> rag
+sk_reminder --> reminders_store
+reminders_store --> db_reminders
+sk_schedule --> class_schedule_integ
+class_schedule_integ --> schedule_json
+sk_assignment --> assignments_store
+assignments_store --> db_assignments
+sk_mark_att --> student_records
+student_records --> db_students
+sk_att_query --> student_records
+sk_marks --> student_records
+
+' ingestion pipeline (separate from live voice pipeline)
+incoming --> import_script
+import_script --> excel_import
+import_script --> pdf_import
+excel_import --> student_records
+excel_import --> schedule_json
+pdf_import --> rag
+excel_import ..> incoming : reads
+
+rag --> chroma
+rag --> kb_seed_a : seed_default_knowledge_base()
+rag --> kb_seed_c : seed_classroom_knowledge_base()
+rag --> embed
+
+' personalization
+normalize --> personalization : known_corrections
+server --> personalization : /api/correction
+
+' backend routing: every LLM-touching stage asks config which backend
+accent_noise ..> config : resolve_llm_backend("reasoning")
+normalize ..> config : resolve_llm_backend("cleanup")
+visual_eq ..> config : resolve_llm_backend("caption")
+accessibility ..> config : resolve_llm_backend("reasoning")
+simplify ..> config : resolve_llm_backend("cleanup")
+intent ..> config : resolve_llm_backend("intent")
+generate ..> config : resolve_llm_backend("response")
+recovery ..> config : resolve_llm_backend("reasoning")
+config --> mock_llm
+config --> ollama_llm
+config --> genailab_llm
+config --> asr : ASR_BACKEND
+config --> vision : VISION_BACKEND
+config --> embed : EMBED_BACKEND
+
+genailab_llm --> ext_gpt
+genailab_llm --> ext_deepseek
+asr --> ext_whisper : ASR_BACKEND=event
+embed --> ext_embed : EMBED_BACKEND=event
+ollama_llm --> ollama_models
+embed --> ollama_models : EMBED_BACKEND=ollama
+
+genailab_llm --> cost : record cost per call
+asr --> cost : record_asr()
+embed --> cost
+cost ..> config : BUDGET_USD_CAP
+
+note right of cached_fallback
+  NFR-03 resilience: any exception anywhere
+  in _run_pipeline_live() is caught here.
+  Real fix applied: matches against the ASR's
+  actual transcript (threaded out via
+  partial_state) instead of always "" ->
+  scenarios[0] ("book appointment" for
+  every failure, regardless of cause).
+end note
+
+note right of config
+  One switch controls every stage's backend:
+  mock   -> $0, fully offline, dev/plumbing
+  local  -> local Whisper + Ollama, $0 offline
+  hybrid -> ASR + final response hosted, rest Ollama
+  fast   -> everything hosted, lightweight models
+  hosted -> everything hosted, max accuracy
+  Per-stage env var overrides always win
+  (e.g. LLM_BACKEND_RESPONSE=event).
+end note
+
+note bottom of excel_import
+  Real ingestion architecture:
+  structured/exact/updatable data (attendance,
+  marks, roster, schedule) -> SQLite, because
+  "who's absent TODAY" is a computation over
+  live rows, not semantic retrieval.
+  Unstructured/narrative content (PDFs, FAQs)
+  -> RAG/embeddings.
+  Never guesses silently: every import returns
+  an ImportReport (mapped/unmapped columns,
+  warnings, errors) -- always read it.
+end note
+
+@enduml
